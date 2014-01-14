@@ -1,7 +1,7 @@
 go-apache-logformat
 ===================
 
-[![Build Status](https://travis-ci.org/lestrrat/go-go-apache-logformat.png?branch=master)](https://travis-ci.org/lestrrat/go-go-apache-logformat)
+[![Build Status](https://travis-ci.org/lestrrat/go-apache-logformat.png?branch=master)](https://travis-ci.org/lestrrat/go-apache-logformat)
 
 Port of Perl5's [Apache::LogFormat::Compiler](https://metacpan.org/release/Apache-LogFormat-Compiler) to golang
 
