@@ -29,11 +29,12 @@ type replaceContext struct {
   reqtime     int
 }
 
-// CommonLog is a pre-defined ApacheLog struct to log "combined" log format
 var CommonLog = NewApacheLog(
   os.Stderr,
   `%h %l %u %t "%r" %>s %b`,
 )
+
+// Combined is a pre-defined ApacheLog struct to log "combined" log format
 var CombinedLog = NewApacheLog(
   os.Stderr,
   `%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"`,
@@ -97,10 +98,10 @@ func (self *ApacheLog) Format(
   )
 }
 
-var NilField string = "-"
+var nilField string = "-"
 func nilOrString(v string) string {
   if v == "" {
-    return NilField
+    return nilField
   } else {
     return v
   }
@@ -118,7 +119,7 @@ func (self *ApacheLog) replaceFunc (match string) string {
   case "%h":
     return nilOrString(r.RemoteAddr)
   case "%l":
-    return NilField
+    return nilField
   case "%q":
     q := r.URL.RawQuery
     if q != "" {
@@ -137,7 +138,7 @@ func (self *ApacheLog) replaceFunc (match string) string {
     return time.Now().Format("02/Jan/2006:15:04:05 -0700")
   case "%u":
     // Unimplemented
-    return NilField
+    return nilField
   case "%D": // custom
     if self.context.reqtime > 0 {
       return fmt.Sprintf("%d", self.context.reqtime)
