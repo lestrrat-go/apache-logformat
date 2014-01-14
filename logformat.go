@@ -14,8 +14,6 @@ import (
  * import("github.com/lestrrat/go-apache-logformat-compiler")
  * l := apachelog.CombinedLog
  * l.LogLine(req)
- *
- * l.SetLogger(log.New(os.Stderr, "", ""))
  */
 
 type ApacheLog struct {
@@ -45,6 +43,10 @@ func NewApacheLog(w io.Writer, fmt string) *ApacheLog {
     logger: w,
     format: fmt,
   }
+}
+
+func (self *ApacheLog) SetOutput(w io.Writer) {
+  self.logger = w
 }
 
 /*
@@ -96,9 +98,6 @@ func nilOrString(v string) string {
 }
 
 func (self *ApacheLog) ReplaceFunc (match string) string {
-os.Stderr.WriteString(
-  fmt.Sprintf("-> match: %s\n", match),
-)
   r := self.context.request
   switch string(match) {
   case "%%":
