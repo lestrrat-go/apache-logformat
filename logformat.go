@@ -168,6 +168,7 @@ func (self *ApacheLog) ReplaceFunc (match string) string {
     case 'i':
       return nilOrString(r.Header.Get(match))
     case 'o':
+      return nilOrString(self.context.respHeader.Get(match))
       // XXX Unimplmened
     case 't':
       // XX Unimplmented

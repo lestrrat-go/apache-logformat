@@ -27,6 +27,22 @@ func TestBasic(t *testing.T) {
   t.Logf(`output = "%s"`, output)
 }
 
+func TestResponseHeader(t *testing.T) {
+  l := NewApacheLog(os.Stderr, "%{X-Req-Header}i %{X-Resp-Header}o")
+  r, err := http.NewRequest("GET", "http://golang.org", nil)
+  if err != nil {
+    t.Errorf("Failed to create request: %s", err)
+  }
+
+  r.Header.Set("X-Req-Header", "Gimme a response!")
+
+  output := l.Format(r, 200, http.Header{"X-Resp-Header": []string{"Here's your response"}}, 1000000)
+  if output != "Gimme a response! Here's your response" {
+    t.Errorf("output '%s' did not match", output)
+  }
+  t.Logf("%s", output)
+}
+
 func TestQuery(t *testing.T) {
   l := NewApacheLog(os.Stderr, "%m %U %q %H")
   r, err := http.NewRequest("GET", "http://golang.org/foo?bar=baz", nil)
