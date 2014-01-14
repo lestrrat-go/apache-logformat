@@ -11,7 +11,7 @@ import (
 )
 
 /*
- * import("github.com/lestrrat/go-apache-logformat-compiler")
+ * import("github.com/lestrrat/go-apache-logformat")
  * l := apachelog.CombinedLog
  * l.LogLine(req)
  */

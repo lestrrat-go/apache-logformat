@@ -15,7 +15,7 @@ go get github.com/lestrrat/go-apache-logformat
 ```go
 import(
     "net/http"
-    "github.com/lestrrat/go-apache-logformat-compiler"
+    "github.com/lestrrat/go-apache-logformat"
 )
 
 var logger *apachelog.NewRequest = apachelog.CombinedLog
