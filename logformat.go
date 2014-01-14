@@ -29,6 +29,7 @@ type replaceContext struct {
   reqtime     int
 }
 
+// CommonLog is a pre-defined ApacheLog struct to log "combined" log format
 var CommonLog = NewApacheLog(
   os.Stderr,
   `%h %l %u %t "%r" %>s %b`,
@@ -45,6 +46,10 @@ func NewApacheLog(w io.Writer, fmt string) *ApacheLog {
   }
 }
 
+/*
+ * SetOutput() can be used to send the output of LogLine to somewhere other 
+ * than os.Stderr
+ */
 func (self *ApacheLog) SetOutput(w io.Writer) {
   self.logger = w
 }
@@ -69,6 +74,10 @@ func (self *ApacheLog) LogLine(
 var percentReplacer = regexp.MustCompile(
   `(?:\%\{(.+?)\}([a-zA-Z])|\%(?:[<>])?([a-zA-Z\%]))`,
 )
+
+/*
+ * Format() creates the log line to be used in LogLine()
+ */
 func (self *ApacheLog) Format(
   r           *http.Request,
   status      int,
@@ -84,7 +93,7 @@ func (self *ApacheLog) Format(
   }
   return percentReplacer.ReplaceAllStringFunc(
     fmt,
-    self.ReplaceFunc,
+    self.replaceFunc,
   )
 }
 
@@ -97,7 +106,7 @@ func nilOrString(v string) string {
   }
 }
 
-func (self *ApacheLog) ReplaceFunc (match string) string {
+func (self *ApacheLog) replaceFunc (match string) string {
   r := self.context.request
   switch string(match) {
   case "%%":
