@@ -81,7 +81,7 @@ func (self *ApacheLog) LogLine(
   respHeader  http.Header,
   reqtime     time.Duration,
 ) {
-  self.logger.Write([]byte(self.Format(r, status, respHeader, reqtime)))
+  self.logger.Write([]byte(self.Format(r, status, respHeader, reqtime) + "\n"))
 }
 
 var percentReplacer = regexp.MustCompile(
