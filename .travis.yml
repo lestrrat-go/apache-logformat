@@ -3,3 +3,6 @@ go:
     - 1.1
     - 1.2
     - tip
+after_success:
+    - go get github.com/mattn/goveralls
+    - goveralls -service 'travis-ci'
