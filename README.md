@@ -11,6 +11,38 @@ To install, simply issue a `go get`:
 go get github.com/lestrrat/go-apache-logformat
 ```
 
+To use the logger alone:
+
+```go
+import(
+    "github.com/lestrrat/go-apache-logformat"
+)
+
+logger := apachelog.NewApacheLog(os.Stderr, "....")
+logger.LogLine(...)
+```
+
+If you just want the Apache combined log format, you can use
+the predefined struct:
+
+```go
+import(
+    "github.com/lestrrat/go-apache-logformat"
+)
+
+logger := apachelog.CombinedLog.Clone()
+```
+
+If you want to change where the logger emits the log to,
+you can either specify it in the `NewApacheLog` function or
+use the `SetOutput` method
+
+```go
+file, err := os.OpenFile(...)
+logger.SetOutput(file)
+```
+
+To wrap an existing handler, you can use the LoggingWriter:
 
 ```go
 import(
@@ -18,11 +50,31 @@ import(
     "github.com/lestrrat/go-apache-logformat"
 )
 
-var logger *apachelog.NewRequest = apachelog.CombinedLog
+func Start() {
+    http.ListenAndServe(
+        ":8080",
+        apachelog.WrapLoggingWriter(ServeHTTP),
+    )
+}
 
+var logger *apachelog.ApacheLog = apachelog.CombinedLog
 func ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    // You need to save status from somewhere, as you can't
-    // get the status code from ResponseWriter
-    defer logger.LogLine(req, status, w.Header())
+    ...
+}
+
+```
+
+To do more fine tuning, embed it in your app:
+
+```go
+import(
+    "net/http"
+    "github.com/lestrrat/go-apache-logformat"
+)
+
+var logger *apachelog.ApacheLog = apachelog.CombinedLog
+func ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    lw := apachelog.NewLoggingWriter(w, r, logger)
+    defer lw.EmitLog()
 }
 ```
