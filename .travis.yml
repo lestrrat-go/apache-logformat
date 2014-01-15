@@ -5,4 +5,5 @@ go:
     - tip
 after_success:
     - go get github.com/mattn/goveralls
-    - goveralls -service 'travis-ci'
+    - go get github.com/axw/gocov
+    - goveralls -service='travis-ci' -v
