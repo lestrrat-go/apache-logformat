@@ -56,3 +56,12 @@ func TestQuery(t *testing.T) {
   }
   t.Logf("%s", output)
 }
+
+func TestClone(t *testing.T) {
+  l := CombinedLog.Clone()
+  l.SetOutput(os.Stdout)
+
+  if CombinedLog.logger == l.logger {
+    t.Errorf("logger struct must not be the same")
+  }
+}
