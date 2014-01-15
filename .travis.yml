@@ -6,4 +6,4 @@ go:
 after_success:
     - go get github.com/mattn/goveralls
     - go get github.com/axw/gocov
-    - goveralls -service='travis-ci' -v
+    - $HOME/gopath/bin/goveralls -service='travis-ci' -v
