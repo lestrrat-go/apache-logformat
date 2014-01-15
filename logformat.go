@@ -130,7 +130,14 @@ func (self *ApacheLog) replaceFunc (match string) string {
   case "%m":
     return r.Method
   case "%h":
-    return nilOrString(r.RemoteAddr)
+    clientIP := r.RemoteAddr
+    if clientIP == "" {
+      return nilField
+    }
+    if colon := strings.LastIndex(clientIP, ":"); colon != -1 {
+      clientIP = clientIP[:colon]
+    }
+    return clientIP
   case "%l":
     return nilField
   case "%q":
@@ -150,7 +157,12 @@ func (self *ApacheLog) replaceFunc (match string) string {
   case "%t":
     return time.Now().Format("02/Jan/2006:15:04:05 -0700")
   case "%u":
-    // Unimplemented
+    u := r.URL.User
+    if u != nil {
+      if name := u.Username(); name != "" {
+        return name
+      }
+    }
     return nilField
   case "%D": // custom
     if self.context.reqtime > 0 {
@@ -192,7 +204,6 @@ func (self *ApacheLog) replaceFunc (match string) string {
       return nilOrString(r.Header.Get(match))
     case 'o':
       return nilOrString(self.context.respHeader.Get(match))
-      // XXX Unimplmened
     case 't':
       // XX Unimplmented
     }
