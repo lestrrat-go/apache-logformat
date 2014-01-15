@@ -4,6 +4,7 @@ import (
   "net/http"
   "os"
   "testing"
+  "time"
 )
 
 func TestBasic(t *testing.T) {
@@ -52,6 +53,15 @@ func TestQuery(t *testing.T) {
 
   output := l.Format(r, 200, http.Header{}, 1000000)
   if output != "GET /foo ?bar=baz HTTP/1.1" {
+    t.Errorf("output '%s' did not match", output)
+  }
+  t.Logf("%s", output)
+}
+
+func TestElpasedTime (t *testing.T) {
+  l := NewApacheLog(os.Stderr, "%T %D")
+  output := l.Format(&http.Request{}, 200, http.Header{}, 1 * time.Second)
+  if output != "1 1000000" {
     t.Errorf("output '%s' did not match", output)
   }
   t.Logf("%s", output)

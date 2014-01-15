@@ -26,7 +26,7 @@ type replaceContext struct {
   request     *http.Request
   status      int
   respHeader  http.Header
-  reqtime     int
+  reqtime     time.Duration
 }
 
 var CommonLog = NewApacheLog(
@@ -72,15 +72,14 @@ func (self *ApacheLog) SetOutput(w io.Writer) {
  * r is http.Request from client. status is the response status code.
  * respHeader is an http.Header of the response.
  *
- * reqtime is optional, and denotes the time taken to serve the
- * request in microseconds, and is optional
+ * reqtime is optional, and denotes the time taken to serve the request
  *
  */
 func (self *ApacheLog) LogLine(
   r           *http.Request,
   status      int,
   respHeader  http.Header,
-  reqtime     int,
+  reqtime     time.Duration,
 ) {
   self.logger.Write([]byte(self.Format(r, status, respHeader, reqtime)))
 }
@@ -96,7 +95,7 @@ func (self *ApacheLog) Format(
   r           *http.Request,
   status      int,
   respHeader  http.Header,
-  reqtime     int,
+  reqtime     time.Duration,
 ) (string) {
   fmt := self.format
   self.context = &replaceContext {
@@ -166,7 +165,7 @@ func (self *ApacheLog) replaceFunc (match string) string {
     return nilField
   case "%D": // custom
     if self.context.reqtime > 0 {
-      return fmt.Sprintf("%d", self.context.reqtime)
+      return fmt.Sprintf("%d", self.context.reqtime / time.Microsecond)
     } else {
       return ""
     }
@@ -174,7 +173,7 @@ func (self *ApacheLog) replaceFunc (match string) string {
     return r.Proto
   case "%T": // custom
     if self.context.reqtime > 0 {
-      return fmt.Sprintf("%d", self.context.reqtime * 1000000)
+      return fmt.Sprintf("%d", self.context.reqtime / time.Second)
     } else {
       return ""
     }
