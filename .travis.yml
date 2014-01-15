@@ -5,7 +5,7 @@ go:
     - tip
 after_success:
     - go get github.com/mattn/goveralls
-    - go get github.com/axw/gocov
+    - go get github.com/axw/gocov/gocov
     - export PATH="$HOME/gopath/bin:$PATH"
     - goveralls -service='travis-ci' -v $COVERALLS_TOKEN
 env:
