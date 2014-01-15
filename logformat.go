@@ -48,6 +48,19 @@ func NewApacheLog(w io.Writer, fmt string) *ApacheLog {
 }
 
 /*
+ * Create a new ApacheLog struct with same args as the target.
+ * This is useful if you want to create an identical logger
+ * but with a different output:
+ *
+ *    mylog := apachelog.CombinedLog.Clone()
+ *    mylog.SetOutput(myOutput)
+ *
+ */
+func (self *ApacheLog) Clone() *ApacheLog {
+  return NewApacheLog(self.logger, self.format)
+}
+
+/*
  * SetOutput() can be used to send the output of LogLine to somewhere other 
  * than os.Stderr
  */
