@@ -6,6 +6,7 @@ go:
 after_success:
     - go get github.com/mattn/goveralls
     - go get github.com/axw/gocov/gocov
+    - go get code.google.com/p/go.tools/cmd/cover
     - export PATH="$HOME/gopath/bin:$PATH"
     - goveralls -service='travis-ci' -v $COVERALLS_TOKEN
 env:
