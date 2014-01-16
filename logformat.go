@@ -1,6 +1,7 @@
 package apachelog
 
 import (
+  "bytes"
   "fmt"
   "io"
   "os"
@@ -97,7 +98,30 @@ func (self *ApacheLog) Format(
   respHeader  http.Header,
   reqtime     time.Duration,
 ) (string) {
-  fmt := self.format
+  return self.FormatLoop(r, status, respHeader, reqtime)
+}
+
+func (self *ApacheLog) FormatLoop(
+  r           *http.Request,
+  status      int,
+  respHeader  http.Header,
+  reqtime     time.Duration,
+) (string) {
+  self.context = &replaceContext {
+    r,
+    status,
+    respHeader,
+    reqtime,
+  }
+  return self.replaceLoop()
+}
+
+func (self *ApacheLog) FormatRegexp(
+  r           *http.Request,
+  status      int,
+  respHeader  http.Header,
+  reqtime     time.Duration,
+) (string) {
   self.context = &replaceContext {
     r,
     status,
@@ -105,9 +129,110 @@ func (self *ApacheLog) Format(
     reqtime,
   }
   return percentReplacer.ReplaceAllStringFunc(
-    fmt,
+    self.format,
     self.replaceFunc,
   )
+}
+
+func (self *ApacheLog) replaceLoop() string {
+  f := self.format
+  r := self.context.request
+  b := &bytes.Buffer {}
+  max   := len(f)
+  start := 0
+  for i := 0; i < max; i++ {
+    c := f[i]
+    if c != '%' {
+      continue
+    }
+
+    // Add to buffer everything we found so far
+    if start != i {
+      b.WriteString(f[start:i])
+    }
+
+    if i >= max - 1 {
+      break
+    }
+
+    n := f[i + 1]
+    switch (n) {
+    case '%':
+      b.WriteByte('%')
+      start = i + 2
+      i = i + 1
+    case 'b':
+      b.WriteString(nilOrString(r.Header.Get("Content-Length")))
+      start = i + 2
+      i = i + 1
+    case 'q':
+      q := r.URL.RawQuery
+      if q != "" {
+        b.WriteString(fmt.Sprintf("?%s", q))
+      }
+      start = i + 2
+      i = i + 1
+    case 'm':
+      b.WriteString(r.Method)
+      start = i + 2
+      i = i + 1
+    case 'D': // custom
+      if self.context.reqtime > 0 {
+        b.WriteString(fmt.Sprintf("%d", self.context.reqtime / time.Microsecond))
+      }
+      start = i + 2
+      i = i + 1
+    case 'H':
+      b.WriteString(r.Proto)
+      start = i + 2
+      i = i + 1
+    case 'T': // custom
+      if self.context.reqtime > 0 {
+        b.WriteString(fmt.Sprintf("%d", self.context.reqtime / time.Second))
+      }
+      start = i + 2
+      i = i + 1
+    case 'U':
+      b.WriteString(r.URL.Path)
+      start = i + 2
+      i = i + 1
+    case '{':
+      // Search the next }
+      end := -1
+      for j := i + 1; j < max; j++ {
+        if f[j] == '}' {
+          end = j
+          break
+        }
+      }
+
+      if end != -1 && end < max - 1 { // Found it!
+        // check for suffix
+        blockType := f[end+1]
+        key       := f[i + 2:end]
+        switch (blockType) {
+        case 'i':
+          b.WriteString(nilOrString(r.Header.Get(key)))
+        case 'o':
+          b.WriteString(nilOrString(self.context.respHeader.Get(key)))
+        case 't':
+          // XX Unimplmented
+        }
+
+        start = end + 2
+        i     = end + 1
+      } else {
+        start = i + 2
+        i     = i + 1
+      }
+    }
+  }
+
+  if start < max - 1 {
+    b.WriteString(f[start:max-1])
+  }
+
+  return string(b.Bytes())
 }
 
 var nilField string = "-"
