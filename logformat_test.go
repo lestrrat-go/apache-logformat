@@ -148,26 +148,3 @@ func TestEdgeCase(t *testing.T) {
   }
 }
 
-func BenchmarkReplaceLoop(t *testing.B) {
-  l := CombinedLog
-  r, err := http.NewRequest("GET", "http://golang.org", nil)
-  if err != nil {
-    t.Errorf("Failed to create request: %s", err)
-  }
-  r.RemoteAddr = "127.0.0.1"
-  r.Header.Set("User-Agent", "Apache-LogFormat Port In Golang")
-  r.Header.Set("Referer", "http://dummy.com")
-
-  for i := 0; i < 100000; i ++ {
-    output := l.FormatLoop(
-      r,
-      200,
-      http.Header{ "Content-Type": []string{"text/plain"} },
-      1500000,
-    )
-    if output == "" {
-      t.Errorf("Failed to Format")
-    }
-  }
-}
-

@@ -8,7 +8,6 @@ import (
   "net/http"
   "strings"
   "time"
-  "regexp"
 )
 
 /*
@@ -85,23 +84,19 @@ func (self *ApacheLog) LogLine(
   self.logger.Write([]byte(self.Format(r, status, respHeader, reqtime) + "\n"))
 }
 
-var percentReplacer = regexp.MustCompile(
-  `(?:\%\{(.+?)\}([a-zA-Z])|\%(?:[<>])?([a-zA-Z\%]))`,
-)
+func defaultAppend(start *int, i *int, b *bytes.Buffer, str string) {
+  b.WriteString(str)
+  defaultAdvance(start, i)
+}
+func defaultAdvance(start *int, i *int) {
+  *start = *i + 2
+  *i     = *i + 1
+}
 
 /*
  * Format() creates the log line to be used in LogLine()
  */
 func (self *ApacheLog) Format(
-  r           *http.Request,
-  status      int,
-  respHeader  http.Header,
-  reqtime     time.Duration,
-) (string) {
-  return self.FormatLoop(r, status, respHeader, reqtime)
-}
-
-func (self *ApacheLog) FormatLoop(
   r           *http.Request,
   status      int,
   respHeader  http.Header,
@@ -113,21 +108,8 @@ func (self *ApacheLog) FormatLoop(
     respHeader,
     reqtime,
   }
-  return self.replaceLoop()
-}
 
-func defaultAppend(start *int, i *int, b *bytes.Buffer, str string) {
-  b.WriteString(str)
-  defaultAdvance(start, i)
-}
-func defaultAdvance(start *int, i *int) {
-  *start = *i + 2
-  *i     = *i + 1
-}
-
-func (self *ApacheLog) replaceLoop() string {
   f := self.format
-  r := self.context.request
   b := &bytes.Buffer {}
   max   := len(f)
   start := 0
