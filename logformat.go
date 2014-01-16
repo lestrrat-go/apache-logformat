@@ -116,22 +116,13 @@ func (self *ApacheLog) FormatLoop(
   return self.replaceLoop()
 }
 
-func (self *ApacheLog) FormatRegexp(
-  r           *http.Request,
-  status      int,
-  respHeader  http.Header,
-  reqtime     time.Duration,
-) (string) {
-  self.context = &replaceContext {
-    r,
-    status,
-    respHeader,
-    reqtime,
-  }
-  return percentReplacer.ReplaceAllStringFunc(
-    self.format,
-    self.replaceFunc,
-  )
+func defaultAppend(start *int, i *int, b *bytes.Buffer, str string) {
+  b.WriteString(str)
+  defaultAdvance(start, i)
+}
+func defaultAdvance(start *int, i *int) {
+  *start = *i + 2
+  *i     = *i + 1
 }
 
 func (self *ApacheLog) replaceLoop() string {
@@ -140,6 +131,7 @@ func (self *ApacheLog) replaceLoop() string {
   b := &bytes.Buffer {}
   max   := len(f)
   start := 0
+
   for i := 0; i < max; i++ {
     c := f[i]
     if c != '%' {
@@ -159,44 +151,75 @@ func (self *ApacheLog) replaceLoop() string {
     n := f[i + 1]
     switch (n) {
     case '%':
-      b.WriteByte('%')
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, "%")
     case 'b':
-      b.WriteString(nilOrString(r.Header.Get("Content-Length")))
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, nilOrString(r.Header.Get("Content-Length")))
+    case 'h':
+      defaultAppend(&start, &i, b, nilOrString(r.RemoteAddr))
+    case 'l':
+      defaultAppend(&start, &i, b, nilField)
+    case 'm':
+      defaultAppend(&start, &i, b, r.Method)
+    case 'p':
+      defaultAppend(&start, &i, b, fmt.Sprintf("%d", os.Getpid()))
     case 'q':
       q := r.URL.RawQuery
       if q != "" {
-        b.WriteString(fmt.Sprintf("?%s", q))
+        q = fmt.Sprintf("?%s", q)
       }
-      start = i + 2
-      i = i + 1
-    case 'm':
-      b.WriteString(r.Method)
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, nilOrString(q))
+    case 'r':
+      defaultAppend(&start, &i, b, fmt.Sprintf("%s %s %s",
+        r.Method,
+        r.URL,
+        r.Proto,
+      ))
+    case 's':
+      defaultAppend(&start, &i, b, fmt.Sprintf("%d", self.context.status))
+    case 't':
+      defaultAppend(&start, &i, b, time.Now().Format("02/Jan/2006:15:04:05 -0700"))
+    case 'u':
+      u := r.URL.User
+      var name string
+      if u != nil {
+        name = u.Username()
+      }
+
+      defaultAppend(&start, &i, b, nilOrString(name))
+    case 'v', 'V':
+      host := r.URL.Host
+      i := strings.Index(host, ":")
+      if i > -1 {
+        host = host[0:i]
+      }
+      defaultAppend(&start, &i, b, nilOrString(host))
+    case '>':
+      if f[i + 2] == 's' {
+        // "Last" status doesn't exist in our case, so it's the same as %s
+        b.WriteString(fmt.Sprintf("%d", self.context.status))
+      } else {
+        b.WriteString(nilField)
+      }
+      start = i + 3
+      i = i + 2
     case 'D': // custom
+      var str string
       if self.context.reqtime > 0 {
-        b.WriteString(fmt.Sprintf("%d", self.context.reqtime / time.Microsecond))
+        str = fmt.Sprintf("%d", self.context.reqtime / time.Microsecond)
       }
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, nilOrString(str))
     case 'H':
-      b.WriteString(r.Proto)
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, r.Proto)
+    case 'P':
+      // Unimplemented
     case 'T': // custom
+      var str string
       if self.context.reqtime > 0 {
-        b.WriteString(fmt.Sprintf("%d", self.context.reqtime / time.Second))
+        str = fmt.Sprintf("%d", self.context.reqtime / time.Second)
       }
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, nilOrString(str))
     case 'U':
-      b.WriteString(r.URL.Path)
-      start = i + 2
-      i = i + 1
+      defaultAppend(&start, &i, b, r.URL.Path)
     case '{':
       // Search the next }
       end := -1
@@ -223,7 +246,7 @@ func (self *ApacheLog) replaceLoop() string {
         start = end + 2
         i     = end + 1
       } else {
-        start = i 
+        start = i
         i     = i + 1
       }
     }
@@ -243,95 +266,4 @@ func nilOrString(v string) string {
   } else {
     return v
   }
-}
-
-func (self *ApacheLog) replaceFunc (match string) string {
-  r := self.context.request
-  switch string(match) {
-  case "%%":
-    return "%"
-  case "%b":
-    return nilOrString(r.Header.Get("Content-Length"))
-  case "%m":
-    return r.Method
-  case "%h":
-    clientIP := r.RemoteAddr
-    if clientIP == "" {
-      return nilField
-    }
-    if colon := strings.LastIndex(clientIP, ":"); colon != -1 {
-      clientIP = clientIP[:colon]
-    }
-    return clientIP
-  case "%l":
-    return nilField
-  case "%q":
-    q := r.URL.RawQuery
-    if q != "" {
-      return fmt.Sprintf("?%s", q)
-    }
-    return q
-  case "%r":
-    return fmt.Sprintf("%s %s %s",
-      r.Method,
-      r.URL,
-      r.Proto,
-    )
-  case "%s", "%>s": // > doesn't mean anything here
-    return fmt.Sprintf("%d", self.context.status)
-  case "%t":
-    return time.Now().Format("02/Jan/2006:15:04:05 -0700")
-  case "%u":
-    u := r.URL.User
-    if u != nil {
-      if name := u.Username(); name != "" {
-        return name
-      }
-    }
-    return nilField
-  case "%D": // custom
-    if self.context.reqtime > 0 {
-      return fmt.Sprintf("%d", self.context.reqtime / time.Microsecond)
-    } else {
-      return ""
-    }
-  case "%H":
-    return r.Proto
-  case "%T": // custom
-    if self.context.reqtime > 0 {
-      return fmt.Sprintf("%d", self.context.reqtime / time.Second)
-    } else {
-      return ""
-    }
-  case "%U":
-    return r.URL.Path
-  default:
-    // if the second character isn't "{" at this point, we don't
-    // know what the f this is. just return it
-    if match[1] != '{' {
-      return match
-    }
-
-    match = strings.TrimPrefix(match, "%{")
-
-    var blockType byte
-    // check the last character of this pattern "}i"
-    for _, t := range []byte { 'i', 'o', 't' } {
-      if match[len(match) - 1] == t {
-        match = strings.TrimSuffix(match, fmt.Sprintf("}%c", t))
-        blockType = t
-        break
-      }
-    }
-
-    switch blockType {
-    case 'i':
-      return nilOrString(r.Header.Get(match))
-    case 'o':
-      return nilOrString(self.context.respHeader.Get(match))
-    case 't':
-      // XX Unimplmented
-    }
-  }
-  return ""
 }

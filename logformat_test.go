@@ -1,6 +1,7 @@
 package apachelog
 
 import (
+  "fmt"
   "net/http"
   "os"
   "testing"
@@ -121,6 +122,30 @@ func TestEdgeCase(t *testing.T) {
       output,
     )
   }
+
+  // %s and %>s should be the same in our case
+  l = NewApacheLog(os.Stderr, "%s = %>s")
+  output = l.Format(
+    r,
+    404,
+    http.Header {},
+    0,
+  )
+  if output != "404 = 404" {
+    t.Errorf("%%s and %%>s should be the same. Expected '404 = 404', got '%s'", output)
+  }
+
+  // pid
+  l = NewApacheLog(os.Stderr, "%p")
+  output = l.Format(
+    r,
+    200,
+    http.Header {},
+    0,
+  )
+  if output != fmt.Sprintf("%d", os.Getpid()) {
+    t.Errorf("%%p should get us our own pid. Expected '%d', got '%s'", os.Getpid(), output)
+  }
 }
 
 func BenchmarkReplaceLoop(t *testing.B) {
@@ -146,25 +171,3 @@ func BenchmarkReplaceLoop(t *testing.B) {
   }
 }
 
-func BenchmarkReplaceRegexp(t *testing.B) {
-  l := CombinedLog
-  r, err := http.NewRequest("GET", "http://golang.org", nil)
-  if err != nil {
-    t.Errorf("Failed to create request: %s", err)
-  }
-  r.RemoteAddr = "127.0.0.1"
-  r.Header.Set("User-Agent", "Apache-LogFormat Port In Golang")
-  r.Header.Set("Referer", "http://dummy.com")
-
-  for i := 0; i < 100000; i++ {
-    output := l.FormatRegexp(
-      r,
-      200,
-      http.Header{ "Content-Type": []string{"text/plain"} },
-      1500000,
-    )
-    if output == "" {
-      t.Errorf("Failed to Format")
-    }
-  }
-}
