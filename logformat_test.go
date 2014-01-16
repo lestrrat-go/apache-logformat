@@ -90,6 +90,39 @@ func TestClone(t *testing.T) {
   }
 }
 
+func TestEdgeCase(t *testing.T) {
+  // stray %
+  l := NewApacheLog(os.Stderr, "stray percent at the end: %")
+  output := l.Format(
+    &http.Request {},
+    200,
+    http.Header {},
+    0,
+  )
+  if output != "stray percent at the end: %" {
+    t.Errorf("Failed to match output")
+    t.Logf("Expected '%s', got '%s'", "stray percent at the end %", output)
+  }
+
+  // %{...} with missing }
+  l = NewApacheLog(os.Stderr, "Missing closing brace: %{Test <- this should be verbatim")
+  r, _ := http.NewRequest("GET", "http://golang.com", nil)
+  r.Header.Set("Test", "Test Me Test Me")
+  output = l.Format(
+    r,
+    200,
+    http.Header {},
+    0,
+  )
+  if output != "Missing closing brace: %{Test <- this should be verbatim" {
+    t.Errorf("Failed to match output")
+    t.Logf("Exepected '%s', got '%s'",
+      "Missing closing brace: %{Test <- this should be verbatim",
+      output,
+    )
+  }
+}
+
 func BenchmarkReplaceLoop(t *testing.B) {
   l := CombinedLog
   r, err := http.NewRequest("GET", "http://golang.org", nil)

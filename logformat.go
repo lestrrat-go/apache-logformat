@@ -152,6 +152,7 @@ func (self *ApacheLog) replaceLoop() string {
     }
 
     if i >= max - 1 {
+      start = i
       break
     }
 
@@ -222,14 +223,14 @@ func (self *ApacheLog) replaceLoop() string {
         start = end + 2
         i     = end + 1
       } else {
-        start = i + 2
+        start = i 
         i     = i + 1
       }
     }
   }
 
-  if start < max - 1 {
-    b.WriteString(f[start:max-1])
+  if start < max {
+    b.WriteString(f[start:max])
   }
 
   return string(b.Bytes())
