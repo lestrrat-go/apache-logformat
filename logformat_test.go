@@ -146,5 +146,17 @@ func TestEdgeCase(t *testing.T) {
   if output != fmt.Sprintf("%d", os.Getpid()) {
     t.Errorf("%%p should get us our own pid. Expected '%d', got '%s'", os.Getpid(), output)
   }
+
+  // %> followed by unknown char 
+  l = NewApacheLog(os.Stderr, "%>X should be verbatim")
+  output = l.Format(
+    r,
+    200,
+    http.Header {},
+    0,
+  )
+  if output != "%>X should be verbatim" {
+    t.Errorf("%%>X should be verbatim: Expected '%%>X should be verbatim', got '%s'", output)
+  }
 }
 

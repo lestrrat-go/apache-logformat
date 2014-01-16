@@ -179,11 +179,12 @@ func (self *ApacheLog) Format(
       if f[i + 2] == 's' {
         // "Last" status doesn't exist in our case, so it's the same as %s
         b.WriteString(fmt.Sprintf("%d", self.context.status))
+        start = i + 3
+        i = i + 2
       } else {
-        b.WriteString(nilField)
+        // Otherwise we don't know what this is.
+        start = i 
       }
-      start = i + 3
-      i = i + 2
     case 'D': // custom
       var str string
       if self.context.reqtime > 0 {
