@@ -17,7 +17,7 @@ func TestBasic(t *testing.T) {
   r.RemoteAddr = "127.0.0.1"
   r.Header.Set("User-Agent", "Apache-LogFormat Port In Golang")
   r.Header.Set("Referer", "http://dummy.com")
-  output := l.Format(
+  output := l.FormatString(
     r,
     200,
     http.Header{ "Content-Type": []string{"text/plain"} },
@@ -31,7 +31,7 @@ func TestBasic(t *testing.T) {
 
 func TestAllTypes(t *testing.T) {
   l := NewApacheLog(os.Stderr, "This should be a verbatim percent sign -> %%")
-  output := l.Format(
+  output := l.FormatString(
     &http.Request{},
     200,
     http.Header{},
@@ -52,7 +52,7 @@ func TestResponseHeader(t *testing.T) {
 
   r.Header.Set("X-Req-Header", "Gimme a response!")
 
-  output := l.Format(r, 200, http.Header{"X-Resp-Header": []string{"Here's your response"}}, 1000000)
+  output := l.FormatString(r, 200, http.Header{"X-Resp-Header": []string{"Here's your response"}}, 1000000)
   if output != "Gimme a response! Here's your response" {
     t.Errorf("output '%s' did not match", output)
   }
@@ -66,7 +66,7 @@ func TestQuery(t *testing.T) {
     t.Errorf("Failed to create request: %s", err)
   }
 
-  output := l.Format(r, 200, http.Header{}, 1000000)
+  output := l.FormatString(r, 200, http.Header{}, 1000000)
   if output != "GET /foo ?bar=baz HTTP/1.1" {
     t.Errorf("output '%s' did not match", output)
   }
@@ -75,7 +75,7 @@ func TestQuery(t *testing.T) {
 
 func TestElpasedTime (t *testing.T) {
   l := NewApacheLog(os.Stderr, "%T %D")
-  output := l.Format(&http.Request{}, 200, http.Header{}, 1 * time.Second)
+  output := l.FormatString(&http.Request{}, 200, http.Header{}, 1 * time.Second)
   if output != "1 1000000" {
     t.Errorf("output '%s' did not match", output)
   }
@@ -94,7 +94,7 @@ func TestClone(t *testing.T) {
 func TestEdgeCase(t *testing.T) {
   // stray %
   l := NewApacheLog(os.Stderr, "stray percent at the end: %")
-  output := l.Format(
+  output := l.FormatString(
     &http.Request {},
     200,
     http.Header {},
@@ -109,7 +109,7 @@ func TestEdgeCase(t *testing.T) {
   l = NewApacheLog(os.Stderr, "Missing closing brace: %{Test <- this should be verbatim")
   r, _ := http.NewRequest("GET", "http://golang.com", nil)
   r.Header.Set("Test", "Test Me Test Me")
-  output = l.Format(
+  output = l.FormatString(
     r,
     200,
     http.Header {},
@@ -125,7 +125,7 @@ func TestEdgeCase(t *testing.T) {
 
   // %s and %>s should be the same in our case
   l = NewApacheLog(os.Stderr, "%s = %>s")
-  output = l.Format(
+  output = l.FormatString(
     r,
     404,
     http.Header {},
@@ -137,19 +137,14 @@ func TestEdgeCase(t *testing.T) {
 
   // pid
   l = NewApacheLog(os.Stderr, "%p")
-  output = l.Format(
-    r,
-    200,
-    http.Header {},
-    0,
-  )
+  output = l.FormatString(r, 200, http.Header {}, 0)
   if output != fmt.Sprintf("%d", os.Getpid()) {
     t.Errorf("%%p should get us our own pid. Expected '%d', got '%s'", os.Getpid(), output)
   }
 
   // %> followed by unknown char 
   l = NewApacheLog(os.Stderr, "%>X should be verbatim")
-  output = l.Format(
+  output = l.FormatString(
     r,
     200,
     http.Header {},

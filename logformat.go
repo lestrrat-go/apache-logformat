@@ -56,16 +56,16 @@ func NewApacheLog(w io.Writer, fmt string) *ApacheLog {
  *    mylog.SetOutput(myOutput)
  *
  */
-func (self *ApacheLog) Clone() *ApacheLog {
-  return NewApacheLog(self.logger, self.format)
+func (al *ApacheLog) Clone() *ApacheLog {
+  return NewApacheLog(al.logger, al.format)
 }
 
 /*
  * SetOutput() can be used to send the output of LogLine to somewhere other 
  * than os.Stderr
  */
-func (self *ApacheLog) SetOutput(w io.Writer) {
-  self.logger = w
+func (al *ApacheLog) SetOutput(w io.Writer) {
+  al.logger = w
 }
 
 /*
@@ -75,13 +75,14 @@ func (self *ApacheLog) SetOutput(w io.Writer) {
  * reqtime is optional, and denotes the time taken to serve the request
  *
  */
-func (self *ApacheLog) LogLine(
+func (al *ApacheLog) LogLine(
   r           *http.Request,
   status      int,
   respHeader  http.Header,
   reqtime     time.Duration,
 ) {
-  self.logger.Write([]byte(self.Format(r, status, respHeader, reqtime) + "\n"))
+  al.logger.Write(al.Format(r, status, respHeader, reqtime))
+  al.logger.Write([]byte { 12 })
 }
 
 func defaultAppend(start *int, i *int, b *bytes.Buffer, str string) {
@@ -93,23 +94,32 @@ func defaultAdvance(start *int, i *int) {
   *i     = *i + 1
 }
 
-/*
- * Format() creates the log line to be used in LogLine()
- */
-func (self *ApacheLog) Format(
+func (al *ApacheLog) FormatString(
   r           *http.Request,
   status      int,
   respHeader  http.Header,
   reqtime     time.Duration,
-) (string) {
-  self.context = &replaceContext {
+) string {
+  return string(al.Format(r, status, respHeader, reqtime))
+}
+
+/*
+ * Format() creates the log line to be used in LogLine()
+ */
+func (al *ApacheLog) Format(
+  r           *http.Request,
+  status      int,
+  respHeader  http.Header,
+  reqtime     time.Duration,
+) ([]byte) {
+  al.context = &replaceContext {
     r,
     status,
     respHeader,
     reqtime,
   }
 
-  f := self.format
+  f := al.format
   b := &bytes.Buffer {}
   max   := len(f)
   start := 0
@@ -157,7 +167,7 @@ func (self *ApacheLog) Format(
         r.Proto,
       ))
     case 's':
-      defaultAppend(&start, &i, b, fmt.Sprintf("%d", self.context.status))
+      defaultAppend(&start, &i, b, fmt.Sprintf("%d", al.context.status))
     case 't':
       defaultAppend(&start, &i, b, time.Now().Format("02/Jan/2006:15:04:05 -0700"))
     case 'u':
@@ -178,7 +188,7 @@ func (self *ApacheLog) Format(
     case '>':
       if f[i + 2] == 's' {
         // "Last" status doesn't exist in our case, so it's the same as %s
-        b.WriteString(fmt.Sprintf("%d", self.context.status))
+        b.WriteString(fmt.Sprintf("%d", al.context.status))
         start = i + 3
         i = i + 2
       } else {
@@ -187,8 +197,8 @@ func (self *ApacheLog) Format(
       }
     case 'D': // custom
       var str string
-      if self.context.reqtime > 0 {
-        str = fmt.Sprintf("%d", self.context.reqtime / time.Microsecond)
+      if al.context.reqtime > 0 {
+        str = fmt.Sprintf("%d", al.context.reqtime / time.Microsecond)
       }
       defaultAppend(&start, &i, b, nilOrString(str))
     case 'H':
@@ -197,8 +207,8 @@ func (self *ApacheLog) Format(
       // Unimplemented
     case 'T': // custom
       var str string
-      if self.context.reqtime > 0 {
-        str = fmt.Sprintf("%d", self.context.reqtime / time.Second)
+      if al.context.reqtime > 0 {
+        str = fmt.Sprintf("%d", al.context.reqtime / time.Second)
       }
       defaultAppend(&start, &i, b, nilOrString(str))
     case 'U':
@@ -221,7 +231,7 @@ func (self *ApacheLog) Format(
         case 'i':
           b.WriteString(nilOrString(r.Header.Get(key)))
         case 'o':
-          b.WriteString(nilOrString(self.context.respHeader.Get(key)))
+          b.WriteString(nilOrString(al.context.respHeader.Get(key)))
         case 't':
           // XX Unimplmented
         }
@@ -239,14 +249,13 @@ func (self *ApacheLog) Format(
     b.WriteString(f[start:max])
   }
 
-  return string(b.Bytes())
+  return b.Bytes()
 }
 
-var nilField string = "-"
+var nilField = "-"
 func nilOrString(v string) string {
   if v == "" {
     return nilField
-  } else {
-    return v
   }
+  return v
 }

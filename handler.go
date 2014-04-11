@@ -13,7 +13,7 @@ which allows you to easily integrate net/http and go-apache-logformat.
 It's easy to wrap an existing handler:
 
   logger := apachelog.NewApacheLog(os.Stderr, ...)
-  http.ListenAndServe(addr, apachelog.WrapLoggingWriter(self.ServeHTTP, logger))
+  http.ListenAndServe(addr, apachelog.WrapLoggingWriter(lw.ServeHTTP, logger))
 
 Or you can call it manually inside your handler:
 
@@ -29,7 +29,6 @@ Or you can call it manually inside your handler:
   }
 
 */
-
 type LoggingWriter struct {
   logger                *ApacheLog
   responseWriter        http.ResponseWriter
@@ -39,6 +38,9 @@ type LoggingWriter struct {
   responseBytes         int64
 }
 
+/*
+WrapLoggingWriter wraps http.HandlerFunc to use the ApacheLog logger 
+*/
 func WrapLoggingWriter(h http.HandlerFunc, logger *ApacheLog) http.HandlerFunc {
   return func (w http.ResponseWriter, r *http.Request) {
     lw := NewLoggingWriter(w, r, logger)
@@ -58,26 +60,26 @@ func NewLoggingWriter(w http.ResponseWriter, r *http.Request, logger *ApacheLog)
   }
 }
 
-func (self *LoggingWriter) Header() http.Header {
-  return self.responseWriter.Header()
+func (lw *LoggingWriter) Header() http.Header {
+  return lw.responseWriter.Header()
 }
 
-func (self *LoggingWriter) Write(p []byte) (int, error) {
-  written, err := self.responseWriter.Write(p)
-  self.responseBytes += int64(written)
+func (lw *LoggingWriter) Write(p []byte) (int, error) {
+  written, err := lw.responseWriter.Write(p)
+  lw.responseBytes += int64(written)
   return written, err
 }
 
-func (self *LoggingWriter) WriteHeader(status int) {
-  self.status = status
-  self.responseWriter.WriteHeader(status)
+func (lw *LoggingWriter) WriteHeader(status int) {
+  lw.status = status
+  lw.responseWriter.WriteHeader(status)
 }
 
-func (self *LoggingWriter) EmitLog() {
-  self.logger.LogLine(
-    self.request,
-    self.status,
-    self.responseWriter.Header(),
-    time.Since(self.reqtime),
+func (lw *LoggingWriter) EmitLog() {
+  lw.logger.LogLine(
+    lw.request,
+    lw.status,
+    lw.responseWriter.Header(),
+    time.Since(lw.reqtime),
   )
 }
