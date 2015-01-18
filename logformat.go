@@ -82,7 +82,7 @@ func (al *ApacheLog) LogLine(
 	reqtime time.Duration,
 ) {
 	al.logger.Write(al.Format(r, status, respHeader, reqtime))
-	al.logger.Write([]byte{12})
+	al.logger.Write([]byte{'\n'})
 }
 
 func defaultAppend(start *int, i *int, b *bytes.Buffer, str string) {
