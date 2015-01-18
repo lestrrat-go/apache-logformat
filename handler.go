@@ -39,14 +39,14 @@ type LoggingWriter struct {
 }
 
 /*
-WrapLoggingWriter wraps http.HandlerFunc to use the ApacheLog logger
+WrapLoggingWriter wraps http.Handler to use the ApacheLog logger
 */
-func WrapLoggingWriter(h http.HandlerFunc, logger *ApacheLog) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func WrapLoggingWriter(h http.Handler, logger *ApacheLog) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lw := NewLoggingWriter(w, r, logger)
 		defer lw.EmitLog()
-		h(lw, r)
-	}
+		h.ServeHTTP(lw, r)
+	})
 }
 
 func NewLoggingWriter(w http.ResponseWriter, r *http.Request, logger *ApacheLog) *LoggingWriter {
