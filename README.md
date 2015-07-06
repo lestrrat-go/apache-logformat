@@ -55,7 +55,7 @@ import(
 func Start() {
     http.ListenAndServe(
         ":8080",
-        apachelog.WrapLoggingWriter(ServeHTTP),
+        apachelog.WrapLoggingWriter(ServeHTTP, logger),
     )
 }
 
