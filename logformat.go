@@ -23,7 +23,6 @@ type ApacheLog struct {
 	logger  io.Writer
 	format  string
 	compiled func(io.Writer, Context) error
-	context *replaceContext
 }
 
 type response struct {
