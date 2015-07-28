@@ -89,6 +89,10 @@ func (al *ApacheLog) SetOutput(w io.Writer) {
 	al.logger = w
 }
 
+func (al *ApacheLog) Output() io.Writer {
+	return al.logger
+}
+
 /*
  * r is http.Request from client. status is the response status code.
  * respHeader is an http.Header of the response.
@@ -418,6 +422,22 @@ func Compile(f string) (callback, error) {
 	return cbs.Logit, nil
 }
 
+// FormatCtxt creates the log line using the given Context
+func (al *ApacheLog) FormatCtx(out io.Writer, ctx Context) error {
+	if al.compiled == nil {
+		c, err := Compile(al.format)
+		if err != nil {
+			return err
+		}
+		al.compiled = c
+	}
+
+	if err := al.compiled(out, ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
 /*
  * Format() creates the log line to be used in LogLine()
  */
@@ -428,14 +448,6 @@ func (al *ApacheLog) Format(
 	respHeader http.Header,
 	reqtime time.Duration,
 ) error {
-	if al.compiled == nil {
-		c, err := Compile(al.format)
-		if err != nil {
-			return err
-		}
-		al.compiled = c
-	}
-
 	ctx := &replaceContext{
 		response: response{
 			status,
@@ -444,9 +456,5 @@ func (al *ApacheLog) Format(
 		request: r,
 		reqtime: reqtime,
 	}
-
-	if err := al.compiled(out, ctx); err != nil {
-		return err
-	}
-	return nil
+	return al.FormatCtx(out, ctx)
 }
