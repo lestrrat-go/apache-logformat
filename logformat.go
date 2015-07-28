@@ -22,14 +22,33 @@ import (
 type ApacheLog struct {
 	logger  io.Writer
 	format  string
+	compiled func(io.Writer, Context) error
 	context *replaceContext
 }
 
+type response struct {
+	status int
+	hdrs   http.Header
+}
+func (r response) Header() http.Header {
+	return r.hdrs
+}
+func (r response) Status() int {
+	return r.status
+}
 type replaceContext struct {
 	request    *http.Request
-	status     int
-	respHeader http.Header
 	reqtime    time.Duration
+	response   response
+}
+func (c replaceContext) ElapsedTime() time.Duration {
+	return c.reqtime
+}
+func (c replaceContext) Request() *http.Request {
+	return c.request
+}
+func (c replaceContext) Response() Response {
+	return c.response
 }
 
 var CommonLog = NewApacheLog(
@@ -83,9 +102,14 @@ func (al *ApacheLog) LogLine(
 	status int,
 	respHeader http.Header,
 	reqtime time.Duration,
-) {
-	al.logger.Write(al.Format(r, status, respHeader, reqtime))
+) error {
+	b, err := al.Format(r, status, respHeader, reqtime)
+	if err != nil {
+		return err
+	}
+	al.logger.Write(b)
 	al.logger.Write([]byte{'\n'})
+	return nil
 }
 
 func defaultAppend(start *int, i *int, b *bytes.Buffer, str string) {
@@ -102,8 +126,12 @@ func (al *ApacheLog) FormatString(
 	status int,
 	respHeader http.Header,
 	reqtime time.Duration,
-) string {
-	return string(al.Format(r, status, respHeader, reqtime))
+) (string, error) {
+	b, err := al.Format(r, status, respHeader, reqtime)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 var (
@@ -274,10 +302,18 @@ func Compile(f string) (callback, error) {
 		}
 
 		if start != i {
+			// this *could* be the last element in string, in which case we just
+			// say meh, just assume this was a literal percent.
+			if i == max {
+				cbs = append(cbs, fixedByteArraySequence(f[start:i]).Logit)
+				start = i
+				break
+			}
 			cbs = append(cbs, fixedByteArraySequence(f[start:i-1]).Logit)
 		}
 
-		// Find what we have next
+		// Find what we have next.
+
 		r, n = utf8.DecodeRuneInString(f[i:])
 		if r == utf8.RuneError {
 			return nil, ErrInvalidRuneSequence
@@ -343,8 +379,9 @@ func Compile(f string) (callback, error) {
 				start = i + 1
 				i = i + 1
 			} else {
-				// Otherwise we don't know what this is.
-				return nil, ErrUnimplemented
+				// Otherwise we don't know what this is. just do a verbatim copy
+				cbs = append(cbs, fixedByteArraySequence([]byte{'%', '>'}).Logit)
+				start = i + n - 1
 			}
 		case '{':
 			// Search the next }
@@ -372,8 +409,8 @@ func Compile(f string) (callback, error) {
 				start = end + 2
 				i = end + 1
 			} else {
-				start = i
-				i = i + 1
+				cbs = append(cbs, fixedByteArraySequence([]byte{'%', '{'}).Logit)
+				start = i + n - 1
 			}
 		}
 	}
@@ -392,152 +429,27 @@ func (al *ApacheLog) Format(
 	status int,
 	respHeader http.Header,
 	reqtime time.Duration,
-) []byte {
-	al.context = &replaceContext{
-		r,
-		status,
-		respHeader,
-		reqtime,
+) ([]byte, error) {
+	ctx := &replaceContext{
+		response: response{
+			status,
+			respHeader,
+		},
+		request: r,
+		reqtime: reqtime,
 	}
 
-	f := al.format
+	if al.compiled == nil {
+		c, err := Compile(al.format)
+		if err != nil {
+			return nil, err
+		}
+		al.compiled = c
+	}
+
 	b := &bytes.Buffer{}
-	max := len(f)
-	start := 0
-
-	for i := 0; i < max; i++ {
-		c := f[i]
-		if c != '%' {
-			continue
-		}
-
-		// Add to buffer everything we found so far
-		if start != i {
-			b.WriteString(f[start:i])
-		}
-
-		if i >= max-1 {
-			start = i
-			break
-		}
-
-		n := f[i+1]
-		switch n {
-		case '%':
-			defaultAppend(&start, &i, b, "%")
-		case 'b':
-			defaultAppend(&start, &i, b, nilOrString(r.Header.Get("Content-Length")))
-		case 'h':
-			defaultAppend(&start, &i, b, nilOrString(r.RemoteAddr))
-		case 'l':
-			defaultAppend(&start, &i, b, nilField)
-		case 'm':
-			defaultAppend(&start, &i, b, r.Method)
-		case 'p':
-			defaultAppend(&start, &i, b, fmt.Sprintf("%d", os.Getpid()))
-		case 'q':
-			q := r.URL.RawQuery
-			if q != "" {
-				q = fmt.Sprintf("?%s", q)
-			}
-			defaultAppend(&start, &i, b, nilOrString(q))
-		case 'r':
-			defaultAppend(&start, &i, b, fmt.Sprintf("%s %s %s",
-				r.Method,
-				r.URL,
-				r.Proto,
-			))
-		case 's':
-			defaultAppend(&start, &i, b, fmt.Sprintf("%d", al.context.status))
-		case 't':
-			defaultAppend(&start, &i, b, time.Now().Format("02/Jan/2006:15:04:05 -0700"))
-		case 'u':
-			u := r.URL.User
-			var name string
-			if u != nil {
-				name = u.Username()
-			}
-
-			defaultAppend(&start, &i, b, nilOrString(name))
-		case 'v', 'V':
-			host := r.URL.Host
-			i := strings.Index(host, ":")
-			if i > -1 {
-				host = host[0:i]
-			}
-			defaultAppend(&start, &i, b, nilOrString(host))
-		case '>':
-			if f[i+2] == 's' {
-				// "Last" status doesn't exist in our case, so it's the same as %s
-				b.WriteString(fmt.Sprintf("%d", al.context.status))
-				start = i + 3
-				i = i + 2
-			} else {
-				// Otherwise we don't know what this is.
-				start = i
-			}
-		case 'D': // custom
-			var str string
-			if al.context.reqtime > 0 {
-				str = fmt.Sprintf("%d", al.context.reqtime/time.Microsecond)
-			}
-			defaultAppend(&start, &i, b, nilOrString(str))
-		case 'H':
-			defaultAppend(&start, &i, b, r.Proto)
-		case 'P':
-			// Unimplemented
-		case 'T': // custom
-			var str string
-			if al.context.reqtime > 0 {
-				str = fmt.Sprintf("%d", al.context.reqtime/time.Second)
-			}
-			defaultAppend(&start, &i, b, nilOrString(str))
-		case 'U':
-			defaultAppend(&start, &i, b, r.URL.Path)
-		case '{':
-			// Search the next }
-			end := -1
-			for j := i; j < max; j++ {
-				if f[j] == '}' {
-					end = j
-					break
-				}
-			}
-
-			if end != -1 && end < max-1 { // Found it!
-				// check for suffix
-				blockType := f[end+1]
-				key := f[i+1 : end]
-				switch blockType {
-				case 'i':
-					b.WriteString(nilOrString(r.Header.Get(key)))
-				case 'o':
-					b.WriteString(nilOrString(al.context.respHeader.Get(key)))
-				case 't':
-					// XX Unimplmented
-				}
-
-				start = end + 2
-				i = end + 1
-			} else {
-				start = i
-				i = i + 1
-			}
-		}
+	if err := al.compiled(b, ctx); err != nil {
+		return nil, err
 	}
-
-	if start < max {
-		b.WriteString(f[start:max])
-	}
-
-	return b.Bytes()
-}
-
-var nilField = "-"
-
-func nilOrString(v string) string {
-	if v == "" {
-		return nilField
-	}
-	return v
+	return b.Bytes(), nil
 }
