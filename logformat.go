@@ -102,11 +102,9 @@ func (al *ApacheLog) LogLine(
 	respHeader http.Header,
 	reqtime time.Duration,
 ) error {
-	b, err := al.Format(r, status, respHeader, reqtime)
-	if err != nil {
+	if err := al.Format(al.logger, r, status, respHeader, reqtime); err != nil {
 		return err
 	}
-	al.logger.Write(b)
 	al.logger.Write([]byte{'\n'})
 	return nil
 }
@@ -126,11 +124,11 @@ func (al *ApacheLog) FormatString(
 	respHeader http.Header,
 	reqtime time.Duration,
 ) (string, error) {
-	b, err := al.Format(r, status, respHeader, reqtime)
-	if err != nil {
+	b := &bytes.Buffer{}
+	if err := al.Format(b, r, status, respHeader, reqtime); err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return b.String(), nil
 }
 
 var (
@@ -424,15 +422,16 @@ func Compile(f string) (callback, error) {
  * Format() creates the log line to be used in LogLine()
  */
 func (al *ApacheLog) Format(
+	out io.Writer,
 	r *http.Request,
 	status int,
 	respHeader http.Header,
 	reqtime time.Duration,
-) ([]byte, error) {
+) error {
 	if al.compiled == nil {
 		c, err := Compile(al.format)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		al.compiled = c
 	}
@@ -446,9 +445,8 @@ func (al *ApacheLog) Format(
 		reqtime: reqtime,
 	}
 
-	b := &bytes.Buffer{}
-	if err := al.compiled(b, ctx); err != nil {
-		return nil, err
+	if err := al.compiled(out, ctx); err != nil {
+		return err
 	}
-	return b.Bytes(), nil
+	return nil
 }
