@@ -1,9 +1,13 @@
 package apachelog
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"net/textproto"
+	"net/url"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -152,5 +156,85 @@ func TestEdgeCase(t *testing.T) {
 	)
 	if output != "%>X should be verbatim" {
 		t.Errorf("%%>X should be verbatim: Expected '%%>X should be verbatim', got '%s'", output)
+	}
+}
+
+func TestCompileAllFixedSequence(t *testing.T) {
+	pat, err := Compile("hello, world!")
+	if err != nil {
+		t.Errorf("Failed to compile: %s", err)
+		return
+	}
+
+	pat(os.Stderr, nil)
+}
+
+type dummyResponse struct {
+	hdrs   http.Header
+	status int
+}
+
+func (r dummyResponse) Header() http.Header {
+	return r.hdrs
+}
+func (r dummyResponse) Status() int {
+	return r.status
+}
+
+type dummyCtx struct {
+	req     *http.Request
+	res     Response
+	elapsed time.Duration
+}
+
+func (d dummyCtx) ElapsedTime() time.Duration {
+	return d.elapsed
+}
+func (d dummyCtx) Request() *http.Request {
+	return d.req
+}
+func (d dummyCtx) Response() Response {
+	return d.res
+}
+
+func TestCompile(t *testing.T) {
+	pat, err := Compile("hello, %% %b %D %h %H %l %m %p %q %r %s %t %T %u %U %v %V %>s %{X-LogFormat-Test}i %{X-LogFormat-Test}o world!")
+	if err != nil {
+		t.Errorf("Failed to compile: %s", err)
+		return
+	}
+
+	b := &bytes.Buffer{}
+	pat(b, dummyCtx{
+		elapsed: 5 * time.Second,
+		req: &http.Request{
+			Header: http.Header{
+				textproto.CanonicalMIMEHeaderKey("Content-Length"):   []string{"8192"},
+				textproto.CanonicalMIMEHeaderKey("X-LogFormat-Test"): []string{"Hello, Request!"},
+			},
+			Method:     "GET",
+			Proto:      "HTTP/1.1",
+			RemoteAddr: "192.168.11.1",
+			URL: &url.URL{
+				Host:     "example.com",
+				Path:     "/hello_world",
+				RawQuery: "hello=world",
+			},
+		},
+		res: &dummyResponse{
+			hdrs: http.Header{
+				textproto.CanonicalMIMEHeaderKey("X-LogFormat-Test"): []string{"Hello, Response!"},
+			},
+			status: 400,
+		},
+	})
+
+	re := regexp.MustCompile(`^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!$`)
+
+	if !re.Match(b.Bytes()) {
+		t.Errorf("output did not match regexp")
+		t.Logf("output: %s", b.String())
+		t.Logf("regexp: %s", re)
+		return
 	}
 }
