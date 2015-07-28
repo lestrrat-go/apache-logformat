@@ -429,6 +429,14 @@ func (al *ApacheLog) Format(
 	respHeader http.Header,
 	reqtime time.Duration,
 ) ([]byte, error) {
+	if al.compiled == nil {
+		c, err := Compile(al.format)
+		if err != nil {
+			return nil, err
+		}
+		al.compiled = c
+	}
+
 	ctx := &replaceContext{
 		response: response{
 			status,
@@ -436,14 +444,6 @@ func (al *ApacheLog) Format(
 		},
 		request: r,
 		reqtime: reqtime,
-	}
-
-	if al.compiled == nil {
-		c, err := Compile(al.format)
-		if err != nil {
-			return nil, err
-		}
-		al.compiled = c
 	}
 
 	b := &bytes.Buffer{}
