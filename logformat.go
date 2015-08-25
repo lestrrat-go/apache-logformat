@@ -252,11 +252,7 @@ func username(out io.Writer, c Context) error {
 	return err
 }
 func requestHost(out io.Writer, c Context) error {
-	host := c.Request().URL.Host
-	i := strings.Index(host, ":")
-	if i > -1 {
-		host = host[0:i]
-	}
+	host := strings.Split(c.Request().Host, ":")[0]
 	_, err := out.Write(valueOf(host))
 	return err
 }
