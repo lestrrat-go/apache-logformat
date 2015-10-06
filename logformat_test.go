@@ -276,6 +276,7 @@ func TestCompile(t *testing.T) {
 			Method:     "GET",
 			Proto:      "HTTP/1.1",
 			RemoteAddr: "192.168.11.1",
+			Host:       "example.com",
 			URL: &url.URL{
 				Host:     "example.com",
 				Path:     "/hello_world",
