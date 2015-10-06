@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -19,47 +20,47 @@ import (
  * l.LogLine(req)
  */
 
-type ApacheLog struct {
-	logger  io.Writer
-	format  string
-	compiled func(io.Writer, Context) error
+// This is the pool used to store the byte.Buffer used as the temporary
+// storage for log line
+var bufferPool = sync.Pool{}
+
+// This is the pool used to store replaceContext
+var ctxPool = sync.Pool{}
+
+func init() {
+	bufferPool.New = func() interface{} {
+		return &bytes.Buffer{}
+	}
+	ctxPool.New = func() interface{} {
+		return &replaceContext{}
+	}
 }
 
-type response struct {
-	status int
-	hdrs   http.Header
-}
-func (r response) Header() http.Header {
-	return r.hdrs
-}
-func (r response) Status() int {
-	return r.status
-}
 type replaceContext struct {
 	request    *http.Request
 	reqtime    time.Duration
-	response   response
+	respStatus int
+	respHdrs   http.Header
 }
+
 func (c replaceContext) ElapsedTime() time.Duration {
 	return c.reqtime
 }
 func (c replaceContext) Request() *http.Request {
 	return c.request
 }
-func (c replaceContext) Response() Response {
-	return c.response
+func (c replaceContext) Status() int {
+	return c.respStatus
+}
+func (c replaceContext) Header() http.Header {
+	return c.respHdrs
 }
 
-var CommonLog = NewApacheLog(
-	os.Stderr,
-	`%h %l %u %t "%r" %>s %b`,
-)
+// Combined is a pre-defined ApacheLog struct to log "common" log format
+var CommonLog = NewApacheLog(os.Stderr, `%h %l %u %t "%r" %>s %b`)
 
 // Combined is a pre-defined ApacheLog struct to log "combined" log format
-var CombinedLog = NewApacheLog(
-	os.Stderr,
-	`%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"`,
-)
+var CombinedLog = NewApacheLog(os.Stderr, `%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"`)
 
 func NewApacheLog(w io.Writer, fmt string) *ApacheLog {
 	return &ApacheLog{
@@ -128,7 +129,11 @@ func (al *ApacheLog) FormatString(
 	respHeader http.Header,
 	reqtime time.Duration,
 ) (string, error) {
-	b := &bytes.Buffer{}
+	b := bufferPool.Get().(*bytes.Buffer)
+	defer bufferPool.Put(b)
+
+	b.Reset()
+
 	if err := al.Format(b, r, status, respHeader, reqtime); err != nil {
 		return "", err
 	}
@@ -136,6 +141,7 @@ func (al *ApacheLog) FormatString(
 }
 
 var (
+	ErrAlreadyCompiled     = errors.New("pattern already compiled")
 	ErrInvalidRuneSequence = errors.New("invalid rune sequence found in format")
 	ErrUnimplemented       = errors.New("pattern unimplemented")
 )
@@ -166,7 +172,7 @@ func (h header) Logit(out io.Writer, c Context) error {
 type responseHeader string
 
 func (h responseHeader) Logit(out io.Writer, c Context) error {
-	_, err := out.Write(valueOf(c.Response().Header().Get(string(h))))
+	_, err := out.Write(valueOf(c.Header().Get(string(h))))
 	return err
 }
 
@@ -225,7 +231,7 @@ func requestLine(out io.Writer, c Context) error {
 func httpStatus(out io.Writer, c Context) error {
 	_, err := io.WriteString(
 		out,
-		strconv.Itoa(c.Response().Status()),
+		strconv.Itoa(c.Status()),
 	)
 	return err
 }
@@ -257,15 +263,6 @@ func requestHost(out io.Writer, c Context) error {
 	return err
 }
 
-type Response interface {
-	Header() http.Header
-	Status() int
-}
-type Context interface {
-	Request() *http.Request
-	Response() Response
-	ElapsedTime() time.Duration
-}
 type callback func(io.Writer, Context) error
 type callbacks []callback
 
@@ -418,14 +415,25 @@ func Compile(f string) (callback, error) {
 	return cbs.Logit, nil
 }
 
+func (al *ApacheLog) Compile() error {
+	if al.compiled != nil {
+		return ErrAlreadyCompiled
+	}
+
+	c, err := Compile(al.format)
+	if err != nil {
+		return err
+	}
+	al.compiled = c
+	return nil
+}
+
 // FormatCtxt creates the log line using the given Context
 func (al *ApacheLog) FormatCtx(out io.Writer, ctx Context) error {
 	if al.compiled == nil {
-		c, err := Compile(al.format)
-		if err != nil {
+		if err := al.Compile(); err != nil {
 			return err
 		}
-		al.compiled = c
 	}
 
 	if err := al.compiled(out, ctx); err != nil {
@@ -444,13 +452,12 @@ func (al *ApacheLog) Format(
 	respHeader http.Header,
 	reqtime time.Duration,
 ) error {
-	ctx := &replaceContext{
-		response: response{
-			status,
-			respHeader,
-		},
-		request: r,
-		reqtime: reqtime,
-	}
+	ctx := ctxPool.Get().(*replaceContext)
+	defer ctxPool.Put(ctx)
+
+	ctx.respStatus = status
+	ctx.respHdrs = respHeader
+	ctx.request = r
+	ctx.reqtime = reqtime
 	return al.FormatCtx(out, ctx)
 }
