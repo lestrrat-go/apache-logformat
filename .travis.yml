@@ -2,13 +2,5 @@ language: go
 sudo: false
 go:
     - 1.4
+    - 1.5
     - tip
-after_success:
-    - go get github.com/mattn/goveralls
-    - go get github.com/axw/gocov/gocov
-    - go get code.google.com/p/go.tools/cmd/cover
-    - export PATH="$HOME/gopath/bin:$PATH"
-    - goveralls $COVERALLS_TOKEN
-env:
-    global:
-        - secure: "NrmZxKhbJG8lFVfEtjZaz+Ht3nxnDMqmBUEEvL5U+rhuppNE+Xzwgcab2+Yjuqs5VorjTkfG1k4zSir4R//nagTlKNyZVn0w3PzomzBXeLTmrtTS6PapqWg+z0ZxxWM9wRicB94CS053TBLF3mNwdScAdRZ3dFExb5QeU49lq+w="
