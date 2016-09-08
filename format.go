@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-
 func (f FormatWriteFunc) WriteTo(dst io.Writer, ctx *LogCtx) error {
 	return f(dst, ctx)
 }

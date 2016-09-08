@@ -1,6 +1,11 @@
 package apachelog
 
-import "errors"
+import (
+	"errors"
+	"io"
+	"net/http"
+	"time"
+)
 
 type ApacheLog struct {
 	format *Format
@@ -36,5 +41,3 @@ type FormatWriter interface {
 }
 
 type FormatWriteFunc func(io.Writer, *LogCtx) error
-
-
