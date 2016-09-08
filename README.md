@@ -10,6 +10,7 @@ go-apache-logformat
 ```go
 import (
   "net/http"
+  "os"
 
   "github.com/lestrrat/go-apache-logformat"
 )
