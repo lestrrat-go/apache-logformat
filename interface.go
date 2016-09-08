@@ -1,20 +1,18 @@
 package apachelog
 
-import (
-	"io"
-	"net/http"
-	"time"
-)
+import "errors"
 
 type ApacheLog struct {
-	logger   io.Writer
-	format   string
-	compiled func(io.Writer, Context) error
+	format *Format
 }
 
-type Context interface {
-	Header() http.Header
-	Status() int
-	Request() *http.Request
-	ElapsedTime() time.Duration
-}
+// Combined is a pre-defined ApacheLog struct to log "common" log format
+var CommonLog, _ = New(`%h %l %u %t "%r" %>s %b`)
+
+// Combined is a pre-defined ApacheLog struct to log "combined" log format
+var CombinedLog, _ = New(`%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"`)
+
+var (
+	ErrInvalidRuneSequence = errors.New("invalid rune sequence found in format")
+	ErrUnimplemented       = errors.New("pattern unimplemented")
+)

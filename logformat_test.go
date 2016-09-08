@@ -1,19 +1,20 @@
-package apachelog
+package apachelog_test
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
-	"net/textproto"
+	"net/http/httptest"
 	"net/url"
 	"os"
-	"regexp"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/lestrrat/go-apache-logformat"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBasic(t *testing.T) {
-	l := CombinedLog
 	r, err := http.NewRequest("GET", "http://golang.org", nil)
 	if err != nil {
 		t.Errorf("Failed to create request: %s", err)
@@ -21,264 +22,271 @@ func TestBasic(t *testing.T) {
 	r.RemoteAddr = "127.0.0.1"
 	r.Header.Set("User-Agent", "Apache-LogFormat Port In Golang")
 	r.Header.Set("Referer", "http://dummy.com")
-	output, err := l.FormatString(
-		r,
-		200,
-		http.Header{"Content-Type": []string{"text/plain"}},
-		1500000,
-	)
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
-		return
-	}
-	if output == "" {
-		t.Errorf("Failed to Format")
-		return
-	}
-	t.Logf(`output = "%s"`, output)
+
+	var out bytes.Buffer
+	h := apachelog.CombinedLog.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello, World!"))
+	}), &out)
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	t.Logf("output = %s", strconv.Quote(out.String()))
 }
 
-func TestAllTypes(t *testing.T) {
-	l := NewApacheLog(os.Stderr, "This should be a verbatim percent sign -> %%")
-	output, err := l.FormatString(
-		&http.Request{},
-		200,
-		http.Header{},
-		0,
-	)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+func TestVerbatim(t *testing.T) {
+	l, err := apachelog.New("This should be a verbatim percent sign -> %%")
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	if output != "This should be a verbatim percent sign -> %" {
-		t.Errorf("Failed to format. Got '%s'", output)
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
 	}
+
+	if !assert.Equal(t, "This should be a verbatim percent sign -> %", b.String(), "output should match") {
+		return
+	}
+	t.Logf("%s", b.String())
 }
 
 func TestResponseHeader(t *testing.T) {
-	l := NewApacheLog(os.Stderr, "%{X-Req-Header}i %{X-Resp-Header}o")
+	l, err := apachelog.New("%{X-Req-Header}i %{X-Resp-Header}o")
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
 	r, err := http.NewRequest("GET", "http://golang.org", nil)
-	if err != nil {
-		t.Errorf("Failed to create request: %s", err)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
 	}
 
 	r.Header.Set("X-Req-Header", "Gimme a response!")
 
-	output, err := l.FormatString(r, 200, http.Header{"X-Resp-Header": []string{"Here's your response"}}, 1000000)
+	var b bytes.Buffer
+	var c apachelog.LogCtx
 
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	c.Request = r
+	c.ResponseHeader = http.Header{}
+	c.ResponseHeader.Add("X-Resp-Header", "Here's your response")
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
 		return
 	}
 
-	if output != "Gimme a response! Here's your response" {
-		t.Errorf("output '%s' did not match", output)
+	if !assert.Equal(t, "Gimme a response! Here's your response", b.String()) {
+		return
 	}
-	t.Logf("%s", output)
+	t.Logf("%s", b.String())
 }
 
 func TestQuery(t *testing.T) {
-	l := NewApacheLog(os.Stderr, "%m %U %q %H")
-	r, err := http.NewRequest("GET", "http://golang.org/foo?bar=baz", nil)
-	if err != nil {
-		t.Errorf("Failed to create request: %s", err)
-	}
-
-	output, err := l.FormatString(r, 200, http.Header{}, 1000000)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	l, err := apachelog.New(`%m %U %q %H`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	if output != "GET /foo ?bar=baz HTTP/1.1" {
-		t.Errorf("output '%s' did not match", output)
+	r, err := http.NewRequest("GET", "http://golang.org/foo?bar=baz", nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
 	}
-	t.Logf("%s", output)
+
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+	c.Request = r
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Equal(t, "GET /foo ?bar=baz HTTP/1.1", b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
 }
 
 func TestElpasedTime(t *testing.T) {
-	l := NewApacheLog(os.Stderr, "%T %D")
-	output, err := l.FormatString(&http.Request{}, 200, http.Header{}, 1*time.Second)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	l, err := apachelog.New(`%T %D`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	if output != "1 1000000" {
-		t.Errorf("output '%s' did not match", output)
+	r, err := http.NewRequest("GET", "http://golang.org", nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
 	}
-	t.Logf("%s", output)
+
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+	c.Request = r
+	c.ElapsedTime = time.Second
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Equal(t, "1 1000000", b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
 }
 
-func TestClone(t *testing.T) {
-	l := CombinedLog.Clone()
-	l.SetOutput(os.Stdout)
-
-	if CombinedLog.logger == l.logger {
-		t.Errorf("logger struct must not be the same")
+func TestStrayPercent(t *testing.T) {
+	l, err := apachelog.New(`stray percent at the end: %`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
 	}
+
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Equal(t, "stray percent at the end: %", b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
 }
 
-func TestEdgeCase(t *testing.T) {
-	// stray %
-	l := NewApacheLog(os.Stderr, "stray percent at the end: %")
-	output, err := l.FormatString(
-		&http.Request{},
-		200,
-		http.Header{},
-		0,
-	)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+func TestMissingClosingBrace(t *testing.T) {
+	l, err := apachelog.New(`Missing closing brace: %{Test <- this should be verbatim`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	if output != "stray percent at the end: %" {
-		t.Errorf("Failed to match output")
-		t.Logf("Expected '%s', got '%s'", "stray percent at the end %", output)
-	}
+	var b bytes.Buffer
+	var c apachelog.LogCtx
 
-	// %{...} with missing }
-	l = NewApacheLog(os.Stderr, "Missing closing brace: %{Test <- this should be verbatim")
-	r, _ := http.NewRequest("GET", "http://golang.com", nil)
-	r.Header.Set("Test", "Test Me Test Me")
-	output, err = l.FormatString(
-		r,
-		200,
-		http.Header{},
-		0,
-	)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
 		return
 	}
 
-	if output != "Missing closing brace: %{Test <- this should be verbatim" {
-		t.Errorf("Failed to match output")
-		t.Logf("Exepected '%s', got '%s'",
-			"Missing closing brace: %{Test <- this should be verbatim",
-			output,
-		)
+	if !assert.Equal(t, "Missing closing brace: %{Test <- this should be verbatim", b.String()) {
+		return
 	}
+	t.Logf("%s", b.String())
+}
 
+func TestPercentS(t *testing.T) {
 	// %s and %>s should be the same in our case
-	l = NewApacheLog(os.Stderr, "%s = %>s")
-	output, err = l.FormatString(
-		r,
-		404,
-		http.Header{},
-		0,
-	)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	l, err := apachelog.New(`%s = %>s`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	if output != "404 = 404" {
-		t.Errorf("%%s and %%>s should be the same. Expected '404 = 404', got '%s'", output)
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+	c.ResponseStatus = http.StatusNotFound
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
 	}
 
+	if !assert.Equal(t, "404 = 404", b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
+}
+
+func TestPid(t *testing.T) {
 	// pid
-	l = NewApacheLog(os.Stderr, "%p")
-	output, err = l.FormatString(r, 200, http.Header{}, 0)
-	if output != fmt.Sprintf("%d", os.Getpid()) {
-		t.Errorf("%%p should get us our own pid. Expected '%d', got '%s'", os.Getpid(), output)
-	}
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	l, err := apachelog.New(`%p`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Equal(t, strconv.Itoa(os.Getpid()), b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
+}
+
+func TestUnknownAfterPecentGreaterThan(t *testing.T) {
 	// %> followed by unknown char
-	l = NewApacheLog(os.Stderr, "%>X should be verbatim")
-	output, err = l.FormatString(
-		r,
-		200,
-		http.Header{},
-		0,
-	)
-
-	if err != nil {
-		t.Errorf("Error while formatting: %s", err)
+	l, err := apachelog.New(`%>X should be verbatim`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	if output != "%>X should be verbatim" {
-		t.Errorf("%%>X should be verbatim: Expected '%%>X should be verbatim', got '%s'", output)
-	}
-}
+	var b bytes.Buffer
+	var c apachelog.LogCtx
 
-func TestCompileAllFixedSequence(t *testing.T) {
-	pat, err := Compile("hello, world!")
-	if err != nil {
-		t.Errorf("Failed to compile: %s", err)
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
 		return
 	}
 
-	b := &bytes.Buffer{}
-	pat(b, nil)
-	if b.String() != "hello, world!" {
-		t.Errorf("bad formatting")
+	if !assert.Equal(t, `%>X should be verbatim`, b.String()) {
+		return
 	}
+	t.Logf("%s", b.String())
 }
 
-type dummyResponse struct {
-	hdrs   http.Header
-	status int
-}
-
-func (r dummyResponse) Header() http.Header {
-	return r.hdrs
-}
-func (r dummyResponse) Status() int {
-	return r.status
-}
-
-func TestCompile(t *testing.T) {
-	pat, err := Compile("hello, %% %b %D %h %H %l %m %p %q %r %s %t %T %u %U %v %V %>s %{X-LogFormat-Test}i %{X-LogFormat-Test}o world!")
-	if err != nil {
-		t.Errorf("Failed to compile: %s", err)
+func TestFixedSequence(t *testing.T) {
+	l, err := apachelog.New(`hello, world!`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	b := &bytes.Buffer{}
-	pat(b, &replaceContext{
-		reqtime: 5 * time.Second,
-		request: &http.Request{
-			Header: http.Header{
-				textproto.CanonicalMIMEHeaderKey("Content-Length"):   []string{"8192"},
-				textproto.CanonicalMIMEHeaderKey("X-LogFormat-Test"): []string{"Hello, Request!"},
-			},
-			Method:     "GET",
-			Proto:      "HTTP/1.1",
-			RemoteAddr: "192.168.11.1",
-			Host:       "example.com",
-			URL: &url.URL{
-				Host:     "example.com",
-				Path:     "/hello_world",
-				RawQuery: "hello=world",
-			},
-		},
-		respHdrs: http.Header{
-			textproto.CanonicalMIMEHeaderKey("X-LogFormat-Test"): []string{"Hello, Response!"},
-		},
-		respStatus: 400,
-	})
+	var b bytes.Buffer
+	var c apachelog.LogCtx
 
-	re := regexp.MustCompile(`^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!$`)
-
-	if !re.Match(b.Bytes()) {
-		t.Errorf("output did not match regexp")
-		t.Logf("output: %s", b.String())
-		t.Logf("regexp: %s", re)
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
 		return
 	}
+
+	if !assert.Equal(t, `hello, world!`, b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
+}
+
+func TestFull(t *testing.T) {
+	l, err := apachelog.New(`hello, %% %b %D %h %H %l %m %p %q %r %s %t %T %u %U %v %V %>s %{X-LogFormat-Test}i %{X-LogFormat-Test}o world!`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
+	r, err := http.NewRequest("GET", "http://golang.org", nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
+	}
+
+	r.Header.Add("Content-Length", "8192")
+	r.Header.Add("X-LogFormat-Test", "Hello, Request!")
+	r.RemoteAddr = "192.168.11.1"
+	r.Host = "example.com"
+	r.URL = &url.URL{
+		Host:     "example.com",
+		Path:     "/hello_world",
+		RawQuery: "hello=world",
+	}
+
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+	c.Request = r
+	c.ElapsedTime = 5 * time.Second
+	c.ResponseStatus = http.StatusBadRequest
+	c.ResponseHeader = http.Header{}
+	c.ResponseHeader.Set("X-LogFormat-Test", "Hello, Response!")
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Regexp(t, `^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!$`, b.String(), "Log line must match") {
+		return
+	}
+	t.Logf("%s", b.String())
 }
