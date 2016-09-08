@@ -12,18 +12,6 @@ import (
 )
 
 
-// Format describes an Apache log format. Given a logging context,
-// it can create a log line.
-type Format struct {
-	writers []FormatWriter
-}
-
-type FormatWriter interface {
-	WriteTo(io.Writer, *LogCtx) error
-}
-
-type FormatWriteFunc func(io.Writer, *LogCtx) error
-
 func (f FormatWriteFunc) WriteTo(dst io.Writer, ctx *LogCtx) error {
 	return f(dst, ctx)
 }

@@ -9,6 +9,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// New creates a new ApacheLog instance from the given
+// format. It will return an error if the format fails to compile.
 func New(format string) (*ApacheLog, error) {
 	var f Format
 	if err := f.compile(format); err != nil {
@@ -18,14 +20,9 @@ func New(format string) (*ApacheLog, error) {
 	return &ApacheLog{format: &f}, nil
 }
 
-type LogCtx struct {
-	Request        *http.Request
-	RequestTime    time.Time
-	ResponseStatus int
-	ResponseHeader http.Header
-	ElapsedTime    time.Duration
-}
-
+// WriteLog generates a log line using the format associated with the
+// ApacheLog instance, using the values from ctx. The result is written
+// to dst
 func (al *ApacheLog) WriteLog(dst io.Writer, ctx *LogCtx) error {
 	buf := getLogBuffer()
 	defer releaseLogBuffer(buf)
