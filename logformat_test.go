@@ -47,7 +47,7 @@ func TestVerbatim(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "This should be a verbatim percent sign -> %", b.String(), "output should match") {
+	if !assert.Equal(t, "This should be a verbatim percent sign -> %\n", b.String(), "output should match") {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -77,7 +77,7 @@ func TestResponseHeader(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "Gimme a response! Here's your response", b.String()) {
+	if !assert.Equal(t, "Gimme a response! Here's your response\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -102,7 +102,7 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "GET /foo ?bar=baz HTTP/1.1", b.String()) {
+	if !assert.Equal(t, "GET /foo ?bar=baz HTTP/1.1\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -128,7 +128,7 @@ func TestElpasedTime(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "1 1000000", b.String()) {
+	if !assert.Equal(t, "1 1000000\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -147,7 +147,7 @@ func TestStrayPercent(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "stray percent at the end: %", b.String()) {
+	if !assert.Equal(t, "stray percent at the end: %\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -166,7 +166,7 @@ func TestMissingClosingBrace(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "Missing closing brace: %{Test <- this should be verbatim", b.String()) {
+	if !assert.Equal(t, "Missing closing brace: %{Test <- this should be verbatim\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -187,7 +187,7 @@ func TestPercentS(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "404 = 404", b.String()) {
+	if !assert.Equal(t, "404 = 404\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -207,7 +207,7 @@ func TestPid(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, strconv.Itoa(os.Getpid()), b.String()) {
+	if !assert.Equal(t, strconv.Itoa(os.Getpid())+"\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -227,7 +227,7 @@ func TestUnknownAfterPecentGreaterThan(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, `%>X should be verbatim`, b.String()) {
+	if !assert.Equal(t, `%>X should be verbatim`+"\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -246,7 +246,7 @@ func TestFixedSequence(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, `hello, world!`, b.String()) {
+	if !assert.Equal(t, `hello, world!`+"\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
@@ -285,7 +285,7 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	if !assert.Regexp(t, `^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!$`, b.String(), "Log line must match") {
+	if !assert.Regexp(t, `^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!\n$`, b.String(), "Log line must match") {
 		return
 	}
 	t.Logf("%s", b.String())

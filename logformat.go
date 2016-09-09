@@ -31,6 +31,11 @@ func (al *ApacheLog) WriteLog(dst io.Writer, ctx *LogCtx) error {
 		return errors.Wrap(err, "failed to format log line")
 	}
 
+	b := buf.Bytes()
+	if b[len(b)-1] != '\n' {
+		buf.Write([]byte{'\n'})
+	}
+
 	if _, err := buf.WriteTo(dst); err != nil {
 		return errors.Wrap(err, "failed to write formated line to destination")
 	}
