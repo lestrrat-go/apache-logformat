@@ -1,6 +1,7 @@
 package apachelog
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -53,11 +54,39 @@ func (h responseHeader) WriteTo(dst io.Writer, ctx *LogCtx) error {
 	return nil
 }
 
-func makeElapsedTime(base time.Duration) FormatWriter {
+func timeFormatter(key string) (FormatWriter, error) {
+	var formatter FormatWriter
+	switch key {
+	case "sec":
+		formatter = elapsedTimeSeconds
+	case "msec":
+		formatter = elapsedTimeMilliSeconds
+	case "usec":
+		formatter = elapsedTimeMicroSeconds
+	case "msec_frac":
+		formatter = elapsedTimeMilliSecondsFrac
+	case "usec_frac":
+		formatter = elapsedTimeMicroSecondsFrac
+	default:
+		return nil, errors.Wrap(ErrUnimplemented, "failed to compile format")
+	}
+	return formatter, nil
+}
+
+func makeElapsedTime(base time.Duration, fraction int) FormatWriter {
 	return FormatWriteFunc(func(dst io.Writer, ctx *LogCtx) error {
 		var str string
 		if elapsed := ctx.ElapsedTime; elapsed > 0 {
-			str = strconv.Itoa(int(elapsed / base))
+			switch fraction {
+			case timeNotFraction:
+				str = strconv.Itoa(int(elapsed / base))
+			case timeMicroFraction:
+				str = fmt.Sprintf("%03d", int((elapsed%time.Millisecond)/base))
+			case timeMilliFraction:
+				str = fmt.Sprintf("%03d", int((elapsed%time.Second)/base))
+			default:
+				return errors.New("failed to write elapsed time")
+			}
 		}
 		if _, err := dst.Write(valueOf(str)); err != nil {
 			return errors.Wrap(err, "failed to write elapsed time")
@@ -66,8 +95,19 @@ func makeElapsedTime(base time.Duration) FormatWriter {
 	})
 }
 
-var elapsedTimeMicroSeconds = makeElapsedTime(time.Microsecond)
-var elapsedTimeSeconds = makeElapsedTime(time.Second)
+const (
+	timeNotFraction = iota
+	timeMicroFraction
+	timeMilliFraction
+)
+
+var (
+	elapsedTimeMicroSeconds     = makeElapsedTime(time.Microsecond, timeNotFraction)
+	elapsedTimeMilliSeconds     = makeElapsedTime(time.Millisecond, timeNotFraction)
+	elapsedTimeMicroSecondsFrac = makeElapsedTime(time.Microsecond, timeMicroFraction)
+	elapsedTimeMilliSecondsFrac = makeElapsedTime(time.Millisecond, timeMilliFraction)
+	elapsedTimeSeconds          = makeElapsedTime(time.Second, timeNotFraction)
+)
 
 var requestHttpMethod = FormatWriteFunc(func(dst io.Writer, ctx *LogCtx) error {
 	v := valueOf(ctx.Request.Method)
@@ -299,7 +339,13 @@ func (f *Format) compile(s string) error {
 					cbs = append(cbs, requestHeader(key))
 				case 'o':
 					cbs = append(cbs, responseHeader(key))
-				default: // case 't':
+				case 't':
+					formatter, err := timeFormatter(key)
+					if err != nil {
+						return err
+					}
+					cbs = append(cbs, formatter)
+				default:
 					return errors.Wrap(ErrUnimplemented, "failed to compile format")
 				}
 

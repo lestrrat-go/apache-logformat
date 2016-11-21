@@ -109,7 +109,7 @@ func TestQuery(t *testing.T) {
 }
 
 func TestElpasedTime(t *testing.T) {
-	l, err := apachelog.New(`%T %D`)
+	l, err := apachelog.New(`%T %D %{sec}t %{msec}t %{usec}t`)
 	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
@@ -128,7 +128,33 @@ func TestElpasedTime(t *testing.T) {
 		return
 	}
 
-	if !assert.Equal(t, "1 1000000\n", b.String()) {
+	if !assert.Equal(t, "1 1000000 1 1000 1000000\n", b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
+}
+
+func TestElpasedTimeFraction(t *testing.T) {
+	l, err := apachelog.New(`%T.%{msec_frac}t%{usec_frac}t`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
+	r, err := http.NewRequest("GET", "http://golang.org", nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
+	}
+
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+	c.Request = r
+	c.ElapsedTime = time.Second + time.Millisecond*200 + time.Microsecond*90
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Equal(t, "1.200090\n", b.String()) {
 		return
 	}
 	t.Logf("%s", b.String())
