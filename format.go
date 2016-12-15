@@ -178,7 +178,7 @@ var httpStatus = FormatWriteFunc(func(dst io.Writer, ctx *LogCtx) error {
 })
 
 var requestTime = FormatWriteFunc(func(dst io.Writer, ctx *LogCtx) error {
-	v := valueOf(ctx.RequestTime.Format("02/Jan/2006:15:04:05 -0700"))
+	v := valueOf(ctx.RequestTime.Format("[02/Jan/2006:15:04:05 -0700]"))
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request time")
 	}
