@@ -311,7 +311,7 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	if !assert.Regexp(t, `^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4} 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!\n$`, b.String(), "Log line must match") {
+	if !assert.Regexp(t, `^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!\n$`, b.String(), "Log line must match") {
 		return
 	}
 	t.Logf("%s", b.String())
