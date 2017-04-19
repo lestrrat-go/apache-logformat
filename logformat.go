@@ -34,7 +34,7 @@ func (al *ApacheLog) WriteLog(dst io.Writer, ctx LogCtx) error {
 
 	b := buf.Bytes()
 	if b[len(b)-1] != '\n' {
-		buf.Write([]byte{'\n'})
+		buf.WriteByte('\n')
 	}
 
 	if _, err := buf.WriteTo(dst); err != nil {
