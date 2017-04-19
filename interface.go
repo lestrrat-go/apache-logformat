@@ -22,23 +22,23 @@ var (
 	ErrUnimplemented       = errors.New("pattern unimplemented")
 )
 
-type LogCtx struct {
-	Request               *http.Request
-	RequestTime           time.Time
-	ResponseContentLength int64
-	ResponseHeader        http.Header
-	ResponseStatus        int
-	ElapsedTime           time.Duration
-}
-
 // Format describes an Apache log format. Given a logging context,
 // it can create a log line.
 type Format struct {
 	writers []FormatWriter
 }
 
-type FormatWriter interface {
-	WriteTo(io.Writer, *LogCtx) error
+type LogCtx interface {
+	ElapsedTime() time.Duration
+	Request() *http.Request
+	RequestTime() time.Time
+	ResponseContentLength() int64
+	ResponseHeader() http.Header
+	ResponseStatus() int
 }
 
-type FormatWriteFunc func(io.Writer, *LogCtx) error
+type FormatWriter interface {
+	WriteTo(io.Writer, LogCtx) error
+}
+
+type FormatWriteFunc func(io.Writer, LogCtx) error
