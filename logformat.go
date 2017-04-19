@@ -43,12 +43,15 @@ func (al *ApacheLog) WriteLog(dst io.Writer, ctx *LogCtx) error {
 }
 
 type absorbingResponseWriter struct {
-	w   http.ResponseWriter
-	ctx *LogCtx
+	w                     http.ResponseWriter
+	responseContentLength int64
+	ctx                   *LogCtx
 }
 
 func (w *absorbingResponseWriter) Write(buf []byte) (int, error) {
-	return w.w.Write(buf)
+	n, err := w.w.Write(buf)
+	w.responseContentLength += int64(n)
+	return n, err
 }
 
 func (w *absorbingResponseWriter) Header() http.Header {
@@ -75,6 +78,7 @@ func (al *ApacheLog) Wrap(h http.Handler, dst io.Writer) http.Handler {
 		defer releaseResponseWriter(w2)
 
 		defer func() {
+			ctx.ResponseContentLength = w2.responseContentLength
 			ctx.ResponseHeader = w2.Header()
 			ctx.ElapsedTime = time.Since(ctx.RequestTime)
 			if err := al.WriteLog(dst, ctx); err != nil {

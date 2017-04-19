@@ -220,6 +220,11 @@ var requestHost = FormatWriteFunc(func(dst io.Writer, ctx *LogCtx) error {
 	return nil
 })
 
+var responseContentLength = FormatWriteFunc(func(dst io.Writer, ctx *LogCtx) error {
+	_, err := dst.Write(valueOf(strconv.FormatInt(ctx.ResponseContentLength, 10)))
+	return err
+})
+
 func (f *Format) compile(s string) error {
 	var cbs []FormatWriter
 
@@ -262,7 +267,7 @@ func (f *Format) compile(s string) error {
 			cbs = append(cbs, fixedByteSequence([]byte{'%'}))
 			start = i + n - 1
 		case 'b':
-			cbs = append(cbs, requestHeader("Content-Length"))
+			cbs = append(cbs, responseContentLength)
 			start = i + n - 1
 		case 'D': // custom
 			cbs = append(cbs, elapsedTimeMicroSeconds)

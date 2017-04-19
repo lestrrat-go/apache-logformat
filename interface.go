@@ -23,11 +23,12 @@ var (
 )
 
 type LogCtx struct {
-	Request        *http.Request
-	RequestTime    time.Time
-	ResponseStatus int
-	ResponseHeader http.Header
-	ElapsedTime    time.Duration
+	Request               *http.Request
+	RequestTime           time.Time
+	ResponseContentLength int64
+	ResponseHeader        http.Header
+	ResponseStatus        int
+	ElapsedTime           time.Duration
 }
 
 // Format describes an Apache log format. Given a logging context,
