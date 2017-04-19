@@ -41,8 +41,9 @@ func getLogCtx() *LogCtx {
 func releaseLogCtx(v *LogCtx) {
 	v.Request = nil
 	v.RequestTime = time.Time{}
-	v.ResponseStatus = http.StatusOK
+	v.ResponseContentLength = 0
 	v.ResponseHeader = nil
+	v.ResponseStatus = http.StatusOK
 	v.ElapsedTime = 0
 	logCtxPool.Put(v)
 }
@@ -61,5 +62,6 @@ func getResponseWriter(w http.ResponseWriter, ctx *LogCtx) *absorbingResponseWri
 func releaseResponseWriter(v *absorbingResponseWriter) {
 	v.w = nil
 	v.ctx = nil
+	v.responseContentLength = 0
 	responseWriterPool.Put(v)
 }

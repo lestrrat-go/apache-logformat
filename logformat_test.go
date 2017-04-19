@@ -2,6 +2,7 @@ package apachelog_test
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -289,7 +290,6 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	r.Header.Add("Content-Length", "8192")
 	r.Header.Add("X-LogFormat-Test", "Hello, Request!")
 	r.RemoteAddr = "192.168.11.1"
 	r.Host = "example.com"
@@ -311,8 +311,38 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	if !assert.Regexp(t, `^hello, % 8192 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!\n$`, b.String(), "Log line must match") {
+	if !assert.Regexp(t, `^hello, % 0 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!\n$`, b.String(), "Log line must match") {
 		return
 	}
 	t.Logf("%s", b.String())
+}
+
+func TestPercentB(t *testing.T) {
+	const message = "Hello, World!"
+
+	hello := func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("hello handler called for %s", r.URL.Path)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, message)
+	}
+
+	l, err := apachelog.New(`%b`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
+	var buf bytes.Buffer
+	s := httptest.NewServer(l.Wrap(http.HandlerFunc(hello), &buf))
+	defer s.Close()
+
+	_, err = http.Get(s.URL)
+	if !assert.NoError(t, err, "GET should succeed") {
+		return
+	}
+
+	var expected = fmt.Sprintf("%d\n", len(message))
+	if !assert.Equal(t, expected, buf.String(), "log should match") {
+		return
+	}
 }
