@@ -262,7 +262,7 @@ func (f *Format) compile(s string) error {
 			cbs = append(cbs, fixedByteSequence([]byte{'%'}))
 			start = i + n - 1
 		case 'b':
-			cbs = append(cbs, requestHeader("Content-Length"))
+			cbs = append(cbs, responseHeader("Content-Length"))
 			start = i + n - 1
 		case 'D': // custom
 			cbs = append(cbs, elapsedTimeMicroSeconds)

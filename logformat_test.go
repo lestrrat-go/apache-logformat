@@ -219,6 +219,28 @@ func TestPercentS(t *testing.T) {
 	t.Logf("%s", b.String())
 }
 
+func TestPercentB(t *testing.T) {
+
+	l, err := apachelog.New(`%b`)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
+	var b bytes.Buffer
+	var c apachelog.LogCtx
+	c.ResponseHeader = http.Header{}
+	c.ResponseHeader.Set("Content-Length", "385")
+
+	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+		return
+	}
+
+	if !assert.Equal(t, "385\n", b.String()) {
+		return
+	}
+	t.Logf("%s", b.String())
+}
+
 func TestPid(t *testing.T) {
 	// pid
 	l, err := apachelog.New(`%p`)
@@ -289,7 +311,6 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	r.Header.Add("Content-Length", "8192")
 	r.Header.Add("X-LogFormat-Test", "Hello, Request!")
 	r.RemoteAddr = "192.168.11.1"
 	r.Host = "example.com"
@@ -306,6 +327,7 @@ func TestFull(t *testing.T) {
 	c.ResponseStatus = http.StatusBadRequest
 	c.ResponseHeader = http.Header{}
 	c.ResponseHeader.Set("X-LogFormat-Test", "Hello, Response!")
+	c.ResponseHeader.Add("Content-Length", "8192")
 
 	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
 		return
