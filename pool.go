@@ -62,5 +62,6 @@ func getResponseWriter(w http.ResponseWriter, ctx *LogCtx) *absorbingResponseWri
 func releaseResponseWriter(v *absorbingResponseWriter) {
 	v.w = nil
 	v.ctx = nil
+	v.responseContentLength = 0
 	responseWriterPool.Put(v)
 }
