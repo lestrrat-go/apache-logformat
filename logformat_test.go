@@ -319,7 +319,11 @@ func TestFull(t *testing.T) {
 
 func TestPercentB(t *testing.T) {
 	const message = "Hello, World!"
+
 	hello := func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("hello handler called for %s", r.URL.Path)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, message)
 	}
 
