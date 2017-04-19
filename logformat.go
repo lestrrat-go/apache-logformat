@@ -4,8 +4,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"time"
 
+	"github.com/lestrrat/go-apache-logformat/internal/httputil"
+	"github.com/lestrrat/go-apache-logformat/internal/logctx"
 	"github.com/pkg/errors"
 )
 
@@ -23,7 +24,7 @@ func New(format string) (*ApacheLog, error) {
 // WriteLog generates a log line using the format associated with the
 // ApacheLog instance, using the values from ctx. The result is written
 // to dst
-func (al *ApacheLog) WriteLog(dst io.Writer, ctx *LogCtx) error {
+func (al *ApacheLog) WriteLog(dst io.Writer, ctx LogCtx) error {
 	buf := getLogBuffer()
 	defer releaseLogBuffer(buf)
 
@@ -42,45 +43,18 @@ func (al *ApacheLog) WriteLog(dst io.Writer, ctx *LogCtx) error {
 	return nil
 }
 
-type absorbingResponseWriter struct {
-	w                     http.ResponseWriter
-	responseContentLength int64
-	ctx                   *LogCtx
-}
-
-func (w *absorbingResponseWriter) Write(buf []byte) (int, error) {
-	n, err := w.w.Write(buf)
-	w.responseContentLength += int64(n)
-	return n, err
-}
-
-func (w *absorbingResponseWriter) Header() http.Header {
-	return w.w.Header()
-}
-
-func (w *absorbingResponseWriter) WriteHeader(status int) {
-	w.ctx.ResponseStatus = status
-	w.w.WriteHeader(status)
-}
-
 // Wrap creates a new http.Handler that logs a formatted log line
 // to dst.
 func (al *ApacheLog) Wrap(h http.Handler, dst io.Writer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := getLogCtx()
-		defer releaseLogCtx(ctx)
+		ctx := logctx.Get(r)
+		defer logctx.Release(ctx)
 
-		ctx.Request = r
-		ctx.RequestTime = time.Now()
-		ctx.ResponseStatus = http.StatusOK
-
-		w2 := getResponseWriter(w, ctx)
-		defer releaseResponseWriter(w2)
+		wrapped := httputil.GetResponseWriter(w)
+		defer httputil.ReleaseResponseWriter(wrapped)
 
 		defer func() {
-			ctx.ResponseContentLength = w2.responseContentLength
-			ctx.ResponseHeader = w2.Header()
-			ctx.ElapsedTime = time.Since(ctx.RequestTime)
+			ctx.Finalize(wrapped)
 			if err := al.WriteLog(dst, ctx); err != nil {
 				// Hmmm... no where to log except for stderr
 				os.Stderr.Write([]byte(err.Error()))
@@ -88,6 +62,6 @@ func (al *ApacheLog) Wrap(h http.Handler, dst io.Writer) http.Handler {
 			}
 		}()
 
-		h.ServeHTTP(w2, r)
+		h.ServeHTTP(wrapped, r)
 	})
 }

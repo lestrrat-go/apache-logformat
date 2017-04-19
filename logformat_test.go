@@ -3,17 +3,27 @@ package apachelog_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/facebookgo/clock"
 	"github.com/lestrrat/go-apache-logformat"
+	"github.com/lestrrat/go-apache-logformat/internal/logctx"
 	"github.com/stretchr/testify/assert"
 )
+
+const message = "Hello, World!"
+
+var hello = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, message)
+})
 
 func TestBasic(t *testing.T) {
 	r, err := http.NewRequest("GET", "http://golang.org", nil)
@@ -35,248 +45,175 @@ func TestBasic(t *testing.T) {
 	t.Logf("output = %s", strconv.Quote(out.String()))
 }
 
-func TestVerbatim(t *testing.T) {
-	l, err := apachelog.New("This should be a verbatim percent sign -> %%")
+func newServer(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.Server {
+	return httptest.NewServer(l.Wrap(h, out))
+}
+
+func testLog(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request)) {
+	l, err := apachelog.New(pattern)
 	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
-	var b bytes.Buffer
-	var c apachelog.LogCtx
+	var buf bytes.Buffer
+	s := newServer(l, h, &buf)
+	defer s.Close()
 
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
+	u := s.URL
+	if modifyURL != nil {
+		u = modifyURL(u)
+	}
+
+	r, err := http.NewRequest("GET", u, nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
 		return
 	}
 
-	if !assert.Equal(t, "This should be a verbatim percent sign -> %\n", b.String(), "output should match") {
+	if modifyRequest != nil {
+		modifyRequest(r)
+	}
+
+	_, err = http.DefaultClient.Do(r)
+	if !assert.NoError(t, err, "GET should succeed") {
 		return
 	}
-	t.Logf("%s", b.String())
+
+	if !assert.Equal(t, expected, buf.String()) {
+		return
+	}
+}
+
+func TestVerbatim(t *testing.T) {
+	testLog(t,
+		"This should be a verbatim percent sign -> %%",
+		"This should be a verbatim percent sign -> %\n",
+		hello,
+		nil,
+		nil,
+	)
 }
 
 func TestResponseHeader(t *testing.T) {
-	l, err := apachelog.New("%{X-Req-Header}i %{X-Resp-Header}o")
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	r, err := http.NewRequest("GET", "http://golang.org", nil)
-	if !assert.NoError(t, err, "request creation should succeed") {
-		return
-	}
-
-	r.Header.Set("X-Req-Header", "Gimme a response!")
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-
-	c.Request = r
-	c.ResponseHeader = http.Header{}
-	c.ResponseHeader.Add("X-Resp-Header", "Here's your response")
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "Gimme a response! Here's your response\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		"%{X-Req-Header}i %{X-Resp-Header}o",
+		"Gimme a response! Here's your response\n",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Resp-Header", "Here's your response")
+		}),
+		nil,
+		func(r *http.Request) {
+			r.Header.Set("X-Req-Header", "Gimme a response!")
+		},
+	)
 }
 
 func TestQuery(t *testing.T) {
-	l, err := apachelog.New(`%m %U %q %H`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	r, err := http.NewRequest("GET", "http://golang.org/foo?bar=baz", nil)
-	if !assert.NoError(t, err, "request creation should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-	c.Request = r
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "GET /foo ?bar=baz HTTP/1.1\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`%m %U %q %H`,
+		"GET /foo ?bar=baz HTTP/1.1\n",
+		hello,
+		func(u string) string {
+			return u + "/foo?bar=baz"
+		},
+		nil,
+	)
 }
 
 func TestElpasedTime(t *testing.T) {
-	l, err := apachelog.New(`%T %D %{sec}t %{msec}t %{usec}t`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
+	o := logctx.Clock
+	defer func() { logctx.Clock = o }()
 
-	r, err := http.NewRequest("GET", "http://golang.org", nil)
-	if !assert.NoError(t, err, "request creation should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-	c.Request = r
-	c.ElapsedTime = time.Second
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "1 1000000 1 1000 1000000\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	cl := clock.NewMock()
+	logctx.Clock = cl
+	testLog(t,
+		`%T %D %{sec}t %{msec}t %{usec}t`,
+		"1 1000000 1 1000 1000000\n",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cl.Add(time.Second)
+		}),
+		nil,
+		nil,
+	)
 }
 
 func TestElpasedTimeFraction(t *testing.T) {
-	l, err := apachelog.New(`%T.%{msec_frac}t%{usec_frac}t`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
+	o := logctx.Clock
+	defer func() { logctx.Clock = o }()
 
-	r, err := http.NewRequest("GET", "http://golang.org", nil)
-	if !assert.NoError(t, err, "request creation should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-	c.Request = r
-	c.ElapsedTime = time.Second + time.Millisecond*200 + time.Microsecond*90
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "1.200090\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	cl := clock.NewMock()
+	logctx.Clock = cl
+	testLog(t,
+		`%T.%{msec_frac}t%{usec_frac}t`,
+		"1.200090\n",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cl.Add(time.Second + time.Millisecond*200 + time.Microsecond*90)
+		}),
+		nil,
+		nil,
+	)
 }
 
 func TestStrayPercent(t *testing.T) {
-	l, err := apachelog.New(`stray percent at the end: %`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "stray percent at the end: %\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`stray percent at the end: %`,
+		"stray percent at the end: %\n",
+		hello,
+		nil,
+		nil,
+	)
 }
 
 func TestMissingClosingBrace(t *testing.T) {
-	l, err := apachelog.New(`Missing closing brace: %{Test <- this should be verbatim`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "Missing closing brace: %{Test <- this should be verbatim\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`Missing closing brace: %{Test <- this should be verbatim`,
+		"Missing closing brace: %{Test <- this should be verbatim\n",
+		hello,
+		nil,
+		nil,
+	)
 }
 
 func TestPercentS(t *testing.T) {
 	// %s and %>s should be the same in our case
-	l, err := apachelog.New(`%s = %>s`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-	c.ResponseStatus = http.StatusNotFound
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, "404 = 404\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`%s = %>s`,
+		"404 = 404\n",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}),
+		nil,
+		nil,
+	)
 }
 
 func TestPid(t *testing.T) {
-	// pid
-	l, err := apachelog.New(`%p`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, strconv.Itoa(os.Getpid())+"\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`%p`, // pid
+		strconv.Itoa(os.Getpid())+"\n",
+		hello,
+		nil,
+		nil,
+	)
 }
 
 func TestUnknownAfterPecentGreaterThan(t *testing.T) {
-	// %> followed by unknown char
-	l, err := apachelog.New(`%>X should be verbatim`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, `%>X should be verbatim`+"\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`%>X should be verbatim`, // %> followed by unknown char
+		`%>X should be verbatim`+"\n",
+		hello,
+		nil,
+		nil,
+	)
 }
 
 func TestFixedSequence(t *testing.T) {
-	l, err := apachelog.New(`hello, world!`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Equal(t, `hello, world!`+"\n", b.String()) {
-		return
-	}
-	t.Logf("%s", b.String())
+	testLog(t,
+		`hello, world!`,
+		"hello, world!\n",
+		hello,
+		nil,
+		nil,
+	)
 }
 
 func TestFull(t *testing.T) {
@@ -285,64 +222,44 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	r, err := http.NewRequest("GET", "http://golang.org", nil)
+	o := logctx.Clock
+	defer func() { logctx.Clock = o }()
+
+	cl := clock.NewMock()
+	logctx.Clock = cl
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cl.Add(5 * time.Second)
+		w.Header().Set("X-LogFormat-Test", "Hello, Response!")
+		w.WriteHeader(http.StatusBadRequest)
+	})
+	var buf bytes.Buffer
+	s := newServer(l, h, &buf)
+	defer s.Close()
+
+	r, err := http.NewRequest("GET", s.URL+"/hello_world?hello=world", nil)
 	if !assert.NoError(t, err, "request creation should succeed") {
 		return
 	}
 
 	r.Header.Add("X-LogFormat-Test", "Hello, Request!")
-	r.RemoteAddr = "192.168.11.1"
-	r.Host = "example.com"
-	r.URL = &url.URL{
-		Host:     "example.com",
-		Path:     "/hello_world",
-		RawQuery: "hello=world",
-	}
 
-	var b bytes.Buffer
-	var c apachelog.LogCtx
-	c.Request = r
-	c.ElapsedTime = 5 * time.Second
-	c.ResponseStatus = http.StatusBadRequest
-	c.ResponseHeader = http.Header{}
-	c.ResponseHeader.Set("X-LogFormat-Test", "Hello, Response!")
-
-	if !assert.NoError(t, l.WriteLog(&b, &c), "WriteLog should succeed") {
-		return
-	}
-
-	if !assert.Regexp(t, `^hello, % 0 5000000 192\.168\.11\.1 HTTP/1\.1 - GET \d+ \?hello=world GET //example\.com/hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 - /hello_world example\.com example\.com 400 Hello, Request! Hello, Response! world!\n$`, b.String(), "Log line must match") {
-		return
-	}
-	t.Logf("%s", b.String())
-}
-
-func TestPercentB(t *testing.T) {
-	const message = "Hello, World!"
-
-	hello := func(w http.ResponseWriter, r *http.Request) {
-		t.Logf("hello handler called for %s", r.URL.Path)
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, message)
-	}
-
-	l, err := apachelog.New(`%b`)
-	if !assert.NoError(t, err, "apachelog.New should succeed") {
-		return
-	}
-
-	var buf bytes.Buffer
-	s := httptest.NewServer(l.Wrap(http.HandlerFunc(hello), &buf))
-	defer s.Close()
-
-	_, err = http.Get(s.URL)
+	_, err = http.DefaultClient.Do(r)
 	if !assert.NoError(t, err, "GET should succeed") {
 		return
 	}
 
-	var expected = fmt.Sprintf("%d\n", len(message))
-	if !assert.Equal(t, expected, buf.String(), "log should match") {
+	if !assert.Regexp(t, `^hello, % 0 5000000 127\.0\.0\.1:\d+ HTTP/1\.1 - GET \d+ \?hello=world GET /hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 - /hello_world 127\.0\.0\.1 127\.0\.0\.1 400 Hello, Request! Hello, Response! world!\n$`, buf.String(), "Log line must match") {
 		return
 	}
+	t.Logf("%s", buf.String())
+}
+
+func TestPercentB(t *testing.T) {
+	testLog(t,
+		`%b`,
+		fmt.Sprintf("%d\n", len(message)),
+		hello,
+		nil,
+		nil,
+	)
 }
