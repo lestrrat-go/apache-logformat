@@ -17,7 +17,7 @@ func (f FormatWriteFunc) WriteTo(dst io.Writer, ctx LogCtx) error {
 }
 
 var dashValue = []byte{'-'}
-var emptyValue = []byte{'-'}
+var emptyValue = []byte(nil)
 
 func valueOf(s string, replacement []byte) []byte {
 	if s == "" {
@@ -171,8 +171,11 @@ var requestLine = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var httpStatus = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(strconv.Itoa(ctx.ResponseStatus()), emptyValue)
-	if _, err := dst.Write(v); err != nil {
+	var s string
+	if st := ctx.ResponseStatus(); st != 0 { // can't really happen, but why not
+		s = strconv.Itoa(st)
+	}
+	if _, err := dst.Write(valueOf(s, emptyValue)); err != nil {
 		return errors.Wrap(err, "failed to write response status")
 	}
 	return nil
@@ -220,7 +223,11 @@ var requestHost = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var responseContentLength = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	_, err := dst.Write(valueOf(strconv.FormatInt(ctx.ResponseContentLength(), 10), dashValue))
+	var s string
+	if cl := ctx.ResponseContentLength(); cl != 0 {
+		s = strconv.FormatInt(cl, 10)
+	}
+	_, err := dst.Write(valueOf(s, dashValue))
 	return err
 })
 
