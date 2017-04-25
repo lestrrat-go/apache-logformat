@@ -16,11 +16,12 @@ func (f FormatWriteFunc) WriteTo(dst io.Writer, ctx LogCtx) error {
 	return f(dst, ctx)
 }
 
-var emptyValue = []byte{'-'}
+var dashValue = []byte{'-'}
+var emptyValue = []byte(nil)
 
-func valueOf(s string) []byte {
+func valueOf(s string, replacement []byte) []byte {
 	if s == "" {
-		return emptyValue
+		return replacement
 	}
 	return []byte(s)
 }
@@ -38,7 +39,7 @@ type requestHeader string
 
 func (h requestHeader) WriteTo(dst io.Writer, ctx LogCtx) error {
 	v := ctx.Request().Header.Get(string(h))
-	if _, err := dst.Write(valueOf(v)); err != nil {
+	if _, err := dst.Write(valueOf(v, dashValue)); err != nil {
 		return errors.Wrap(err, "failed to write request header value")
 	}
 	return nil
@@ -48,7 +49,7 @@ type responseHeader string
 
 func (h responseHeader) WriteTo(dst io.Writer, ctx LogCtx) error {
 	v := ctx.ResponseHeader().Get(string(h))
-	if _, err := dst.Write(valueOf(v)); err != nil {
+	if _, err := dst.Write(valueOf(v, dashValue)); err != nil {
 		return errors.Wrap(err, "failed to write response header value")
 	}
 	return nil
@@ -88,7 +89,7 @@ func makeElapsedTime(base time.Duration, fraction int) FormatWriter {
 				return errors.New("failed to write elapsed time")
 			}
 		}
-		if _, err := dst.Write(valueOf(str)); err != nil {
+		if _, err := dst.Write(valueOf(str, dashValue)); err != nil {
 			return errors.Wrap(err, "failed to write elapsed time")
 		}
 		return nil
@@ -110,7 +111,7 @@ var (
 )
 
 var requestHttpMethod = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.Request().Method)
+	v := valueOf(ctx.Request().Method, emptyValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request method")
 	}
@@ -118,7 +119,7 @@ var requestHttpMethod = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var requestHttpProto = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.Request().Proto)
+	v := valueOf(ctx.Request().Proto, emptyValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request HTTP request proto")
 	}
@@ -126,7 +127,7 @@ var requestHttpProto = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var requestRemoteAddr = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.Request().RemoteAddr)
+	v := valueOf(ctx.Request().RemoteAddr, dashValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request remote address")
 	}
@@ -134,7 +135,7 @@ var requestRemoteAddr = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var pid = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(strconv.Itoa(os.Getpid()))
+	v := valueOf(strconv.Itoa(os.Getpid()), emptyValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write pid")
 	}
@@ -146,7 +147,7 @@ var rawQuery = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 	if q != "" {
 		q = "?" + q
 	}
-	v := valueOf(q)
+	v := valueOf(q, emptyValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write raw request query")
 	}
@@ -170,15 +171,18 @@ var requestLine = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var httpStatus = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(strconv.Itoa(ctx.ResponseStatus()))
-	if _, err := dst.Write(v); err != nil {
+	var s string
+	if st := ctx.ResponseStatus(); st != 0 { // can't really happen, but why not
+		s = strconv.Itoa(st)
+	}
+	if _, err := dst.Write(valueOf(s, emptyValue)); err != nil {
 		return errors.Wrap(err, "failed to write response status")
 	}
 	return nil
 })
 
 var requestTime = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.RequestTime().Format("[02/Jan/2006:15:04:05 -0700]"))
+	v := valueOf(ctx.RequestTime().Format("[02/Jan/2006:15:04:05 -0700]"), []byte{'[',']'})
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request time")
 	}
@@ -186,7 +190,7 @@ var requestTime = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var urlPath = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.Request().URL.Path)
+	v := valueOf(ctx.Request().URL.Path, emptyValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request URL path")
 	}
@@ -194,11 +198,9 @@ var urlPath = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var username = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	var v []byte
+	var v = dashValue
 	if u := ctx.Request().URL.User; u != nil {
-		v = valueOf(u.Username())
-	} else {
-		v = emptyValue
+		v = valueOf(u.Username(), dashValue)
 	}
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write username")
@@ -210,9 +212,9 @@ var requestHost = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 	var v []byte
 	h := ctx.Request().Host
 	if strings.IndexByte(h, ':') > 0 {
-		v = valueOf(strings.Split(ctx.Request().Host, ":")[0])
+		v = valueOf(strings.Split(ctx.Request().Host, ":")[0], dashValue)
 	} else {
-		v = valueOf(h)
+		v = valueOf(h, dashValue)
 	}
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request host")
@@ -221,7 +223,11 @@ var requestHost = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var responseContentLength = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	_, err := dst.Write(valueOf(strconv.FormatInt(ctx.ResponseContentLength(), 10)))
+	var s string
+	if cl := ctx.ResponseContentLength(); cl != 0 {
+		s = strconv.FormatInt(cl, 10)
+	}
+	_, err := dst.Write(valueOf(s, dashValue))
 	return err
 })
 
@@ -279,7 +285,7 @@ func (f *Format) compile(s string) error {
 			cbs = append(cbs, requestHttpProto)
 			start = i + n - 1
 		case 'l':
-			cbs = append(cbs, fixedByteSequence(emptyValue))
+			cbs = append(cbs, fixedByteSequence(dashValue))
 			start = i + n - 1
 		case 'm':
 			cbs = append(cbs, requestHttpMethod)
