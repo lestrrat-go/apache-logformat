@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	strftime "github.com/lestrrat/go-strftime"
 	"github.com/pkg/errors"
 )
 
@@ -55,23 +56,78 @@ func (h responseHeader) WriteTo(dst io.Writer, ctx LogCtx) error {
 	return nil
 }
 
+func makeRequestTimeBegin(s string) (FormatWriter, error) {
+	f, err := strftime.New(s)
+	if err != nil {
+		return nil, errors.Wrap(err, `failed to compile strftime pattern`)
+	}
+
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		return f.Format(dst, ctx.RequestTime())
+	}), nil
+}
+
+func makeRequestTimeEnd(s string) (FormatWriter, error) {
+	f, err := strftime.New(s)
+	if err != nil {
+		return nil, errors.Wrap(err, `failed to compile strftime pattern`)
+	}
+
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		return f.Format(dst, ctx.ResponseTime())
+	}), nil
+}
+
 func timeFormatter(key string) (FormatWriter, error) {
 	var formatter FormatWriter
 	switch key {
 	case "sec":
-		formatter = elapsedTimeSeconds
+		formatter = requestTimeSecondsSinceEpoch
 	case "msec":
-		formatter = elapsedTimeMilliSeconds
+		formatter = requestTimeMillisecondsSinceEpoch
 	case "usec":
-		formatter = elapsedTimeMicroSeconds
+		formatter = requestTimeMicrosecondsSinceEpoch
 	case "msec_frac":
-		formatter = elapsedTimeMilliSecondsFrac
+		formatter = requestTimeMillisecondsFracSinceEpoch
 	case "usec_frac":
-		formatter = elapsedTimeMicroSecondsFrac
+		formatter = requestTimeMicrosecondsFracSinceEpoch
 	default:
+		const beginPrefix = "begin:"
+		const endPrefix = "end:"
+		if strings.HasPrefix(key, beginPrefix) {
+			return makeRequestTimeBegin(key[len(beginPrefix):])
+		} else if strings.HasPrefix(key, endPrefix) {
+			return makeRequestTimeEnd(key[len(endPrefix):])
+		}
+
 		return nil, errors.Wrap(ErrUnimplemented, "failed to compile format")
 	}
 	return formatter, nil
+}
+
+var epoch = time.Unix(0, 0)
+
+func makeRequestTimeSinceEpoch(base time.Duration) FormatWriter {
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		dur := ctx.RequestTime().Sub(epoch)
+		s := strconv.FormatInt(dur.Nanoseconds()/int64(base), 10)
+		if _, err := dst.Write(valueOf(s, dashValue)); err != nil {
+			return errors.Wrap(err, `failed to write request time since epoch`)
+		}
+		return nil
+	})
+}
+
+func makeRequestTimeFracSinceEpoch(base time.Duration) FormatWriter {
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		dur := ctx.RequestTime().Sub(epoch)
+
+		s := fmt.Sprintf("%g", float64(dur.Nanoseconds()%int64(base*1000))/float64(base))
+		if _, err := dst.Write(valueOf(s, dashValue)); err != nil {
+			return errors.Wrap(err, `failed to write request time since epoch`)
+		}
+		return nil
+	})
 }
 
 func makeElapsedTime(base time.Duration, fraction int) FormatWriter {
@@ -103,11 +159,16 @@ const (
 )
 
 var (
-	elapsedTimeMicroSeconds     = makeElapsedTime(time.Microsecond, timeNotFraction)
-	elapsedTimeMilliSeconds     = makeElapsedTime(time.Millisecond, timeNotFraction)
-	elapsedTimeMicroSecondsFrac = makeElapsedTime(time.Microsecond, timeMicroFraction)
-	elapsedTimeMilliSecondsFrac = makeElapsedTime(time.Millisecond, timeMilliFraction)
-	elapsedTimeSeconds          = makeElapsedTime(time.Second, timeNotFraction)
+	elapsedTimeMicroSeconds               = makeElapsedTime(time.Microsecond, timeNotFraction)
+	elapsedTimeMilliSeconds               = makeElapsedTime(time.Millisecond, timeNotFraction)
+	elapsedTimeMicroSecondsFrac           = makeElapsedTime(time.Microsecond, timeMicroFraction)
+	elapsedTimeMilliSecondsFrac           = makeElapsedTime(time.Millisecond, timeMilliFraction)
+	elapsedTimeSeconds                    = makeElapsedTime(time.Second, timeNotFraction)
+	requestTimeMicrosecondsFracSinceEpoch = makeRequestTimeFracSinceEpoch(time.Microsecond)
+	requestTimeMillisecondsFracSinceEpoch = makeRequestTimeFracSinceEpoch(time.Millisecond)
+	requestTimeSecondsSinceEpoch          = makeRequestTimeSinceEpoch(time.Second)
+	requestTimeMillisecondsSinceEpoch     = makeRequestTimeSinceEpoch(time.Millisecond)
+	requestTimeMicrosecondsSinceEpoch     = makeRequestTimeSinceEpoch(time.Microsecond)
 )
 
 var requestHttpMethod = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
@@ -182,7 +243,7 @@ var httpStatus = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var requestTime = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.RequestTime().Format("[02/Jan/2006:15:04:05 -0700]"), []byte{'[',']'})
+	v := valueOf(ctx.RequestTime().Format("[02/Jan/2006:15:04:05 -0700]"), []byte{'[', ']'})
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request time")
 	}
@@ -351,6 +412,24 @@ func (f *Format) compile(s string) error {
 				case 'o':
 					cbs = append(cbs, responseHeader(key))
 				case 't':
+					// The time, in the form given by format, which should be in an
+					// extended strftime(3) format (potentially localized). If the
+					// format starts with begin: (default) the time is taken at the
+					// beginning of the request processing. If it starts with end:
+					// it is the time when the log entry gets written, close to the
+					// end of the request processing. In addition to the formats
+					// supported by strftime(3), the following format tokens are
+					// supported:
+					//
+					// sec	number of seconds since the Epoch
+					// msec	number of milliseconds since the Epoch
+					// usec	number of microseconds since the Epoch
+					// msec_frac	millisecond fraction
+					// usec_frac	microsecond fraction
+					//
+					// These tokens can not be combined with each other or strftime(3)
+					// formatting in the same format string. You can use multiple
+					// %{format}t tokens instead.
 					formatter, err := timeFormatter(key)
 					if err != nil {
 						return err

@@ -27,6 +27,7 @@ type Context struct {
 	responseContentLength int64
 	responseHeader        http.Header
 	responseStatus        int
+	responseTime          time.Time
 }
 
 var pool = sync.Pool{New: allocCtx}
@@ -71,6 +72,10 @@ func (ctx *Context) ResponseStatus() int {
 	return ctx.responseStatus
 }
 
+func (ctx *Context) ResponseTime() time.Time {
+	return ctx.responseTime
+}
+
 func (ctx *Context) Reset() {
 	ctx.elapsedTime = time.Duration(0)
 	ctx.request = nil
@@ -78,10 +83,12 @@ func (ctx *Context) Reset() {
 	ctx.responseContentLength = 0
 	ctx.responseHeader = http.Header{}
 	ctx.responseStatus = http.StatusOK
+	ctx.responseTime = time.Time{}
 }
 
 func (ctx *Context) Finalize(wrapped *httputil.ResponseWriter) {
-	ctx.elapsedTime = Clock.Now().Sub(ctx.requestTime)
+	ctx.responseTime = Clock.Now()
+	ctx.elapsedTime = ctx.responseTime.Sub(ctx.requestTime)
 	ctx.responseContentLength = wrapped.ContentLength()
 	ctx.responseHeader = wrapped.Header()
 	ctx.responseStatus = wrapped.StatusCode()

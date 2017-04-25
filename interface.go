@@ -35,6 +35,7 @@ type LogCtx interface {
 	ResponseContentLength() int64
 	ResponseHeader() http.Header
 	ResponseStatus() int
+	ResponseTime() time.Time
 }
 
 type FormatWriter interface {
