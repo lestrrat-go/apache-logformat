@@ -3,13 +3,13 @@ package apachelog
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	strftime "github.com/lestrrat/go-strftime"
 	"github.com/pkg/errors"
 )
 
@@ -56,6 +56,28 @@ func (h responseHeader) WriteTo(dst io.Writer, ctx LogCtx) error {
 	return nil
 }
 
+func makeRequestTimeBegin(s string) (FormatWriter, error) {
+	f, err := strftime.New(s)
+	if err != nil {
+		return nil, errors.Wrap(err, `failed to compile strftime pattern`)
+	}
+
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		return f.Format(dst, ctx.RequestTime())
+	}), nil
+}
+
+func makeRequestTimeEnd(s string) (FormatWriter, error) {
+	f, err := strftime.New(s)
+	if err != nil {
+		return nil, errors.Wrap(err, `failed to compile strftime pattern`)
+	}
+
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		return f.Format(dst, ctx.ResponseTime())
+	}), nil
+}
+
 func timeFormatter(key string) (FormatWriter, error) {
 	var formatter FormatWriter
 	switch key {
@@ -70,6 +92,14 @@ func timeFormatter(key string) (FormatWriter, error) {
 	case "usec_frac":
 		formatter = elapsedTimeMicroSecondsFrac
 	default:
+		const beginPrefix = "begin:"
+		const endPrefix = "end:"
+		if strings.HasPrefix(key, beginPrefix) {
+			return makeRequestTimeBegin(key[len(beginPrefix):])
+		} else if strings.HasPrefix(key, endPrefix) {
+			return makeRequestTimeEnd(key[len(endPrefix):])
+		}
+
 		return nil, errors.Wrap(ErrUnimplemented, "failed to compile format")
 	}
 	return formatter, nil

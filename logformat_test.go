@@ -14,6 +14,7 @@ import (
 	"github.com/facebookgo/clock"
 	"github.com/lestrrat/go-apache-logformat"
 	"github.com/lestrrat/go-apache-logformat/internal/logctx"
+	strftime "github.com/lestrrat/go-strftime"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -119,19 +120,33 @@ func TestQuery(t *testing.T) {
 	)
 }
 
-func TestElapsedTime(t *testing.T) {
+func TestTime(t *testing.T) {
 	o := logctx.Clock
 	defer func() { logctx.Clock = o }()
 
 	const longTimeAgo = 233431200 * time.Second
+	const pattern = `%Y-%m-%d`
+
+	f, _ := strftime.New(pattern)
 	cl := clock.NewMock()
 	cl.Add(longTimeAgo)
 	logctx.Clock = cl
 
 	// Mental note: %{[mu]?sec}t should (milli|micro)?seconds since the epoch.
 	testLog(t,
-		`%T %D %{sec}t %{msec}t %{usec}t`,
-		fmt.Sprintf("1 1000000 %d %d %d\n", longTimeAgo/time.Second, longTimeAgo/time.Millisecond, longTimeAgo/time.Microsecond),
+		fmt.Sprintf(
+			`%%T %%D %%{sec}t %%{msec}t %%{usec}t %%{begin:%s}t %%{end:%s}t`,
+			pattern,
+			pattern,
+		),
+		fmt.Sprintf(
+			"1 1000000 %d %d %d %s %s\n",
+			longTimeAgo/time.Second,
+			longTimeAgo/time.Millisecond,
+			longTimeAgo/time.Microsecond,
+			f.FormatString(cl.Now()),
+			f.FormatString(cl.Now().Add(time.Second)),
+		),
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cl.Add(time.Second)
 		}),
