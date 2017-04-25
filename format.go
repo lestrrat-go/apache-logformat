@@ -3,6 +3,7 @@ package apachelog
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -59,11 +60,11 @@ func timeFormatter(key string) (FormatWriter, error) {
 	var formatter FormatWriter
 	switch key {
 	case "sec":
-		formatter = elapsedTimeSeconds
+		formatter = requestTimeSecondsSinceEpoch
 	case "msec":
-		formatter = elapsedTimeMilliSeconds
+		formatter = requestTimeMillisecondsSinceEpoch
 	case "usec":
-		formatter = elapsedTimeMicroSeconds
+		formatter = requestTimeMicrosecondsSinceEpoch
 	case "msec_frac":
 		formatter = elapsedTimeMilliSecondsFrac
 	case "usec_frac":
@@ -72,6 +73,19 @@ func timeFormatter(key string) (FormatWriter, error) {
 		return nil, errors.Wrap(ErrUnimplemented, "failed to compile format")
 	}
 	return formatter, nil
+}
+
+var epoch = time.Unix(0, 0)
+
+func makeRequestTimeSinceEpoch(base time.Duration) FormatWriter {
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		dur := ctx.RequestTime().Sub(epoch)
+		s := strconv.FormatInt(dur.Nanoseconds()/int64(base), 10)
+		if _, err := dst.Write(valueOf(s, dashValue)); err != nil {
+			return errors.Wrap(err, `failed to write request time since epoch`)
+		}
+		return nil
+	})
 }
 
 func makeElapsedTime(base time.Duration, fraction int) FormatWriter {
@@ -103,11 +117,14 @@ const (
 )
 
 var (
-	elapsedTimeMicroSeconds     = makeElapsedTime(time.Microsecond, timeNotFraction)
-	elapsedTimeMilliSeconds     = makeElapsedTime(time.Millisecond, timeNotFraction)
-	elapsedTimeMicroSecondsFrac = makeElapsedTime(time.Microsecond, timeMicroFraction)
-	elapsedTimeMilliSecondsFrac = makeElapsedTime(time.Millisecond, timeMilliFraction)
-	elapsedTimeSeconds          = makeElapsedTime(time.Second, timeNotFraction)
+	elapsedTimeMicroSeconds           = makeElapsedTime(time.Microsecond, timeNotFraction)
+	elapsedTimeMilliSeconds           = makeElapsedTime(time.Millisecond, timeNotFraction)
+	elapsedTimeMicroSecondsFrac       = makeElapsedTime(time.Microsecond, timeMicroFraction)
+	elapsedTimeMilliSecondsFrac       = makeElapsedTime(time.Millisecond, timeMilliFraction)
+	elapsedTimeSeconds                = makeElapsedTime(time.Second, timeNotFraction)
+	requestTimeSecondsSinceEpoch      = makeRequestTimeSinceEpoch(time.Second)
+	requestTimeMillisecondsSinceEpoch = makeRequestTimeSinceEpoch(time.Millisecond)
+	requestTimeMicrosecondsSinceEpoch = makeRequestTimeSinceEpoch(time.Microsecond)
 )
 
 var requestHttpMethod = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
@@ -182,7 +199,7 @@ var httpStatus = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var requestTime = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.RequestTime().Format("[02/Jan/2006:15:04:05 -0700]"), []byte{'[',']'})
+	v := valueOf(ctx.RequestTime().Format("[02/Jan/2006:15:04:05 -0700]"), []byte{'[', ']'})
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request time")
 	}
@@ -351,6 +368,24 @@ func (f *Format) compile(s string) error {
 				case 'o':
 					cbs = append(cbs, responseHeader(key))
 				case 't':
+					// The time, in the form given by format, which should be in an
+					// extended strftime(3) format (potentially localized). If the
+					// format starts with begin: (default) the time is taken at the
+					// beginning of the request processing. If it starts with end:
+					// it is the time when the log entry gets written, close to the
+					// end of the request processing. In addition to the formats
+					// supported by strftime(3), the following format tokens are
+					// supported:
+					//
+					// sec	number of seconds since the Epoch
+					// msec	number of milliseconds since the Epoch
+					// usec	number of microseconds since the Epoch
+					// msec_frac	millisecond fraction
+					// usec_frac	microsecond fraction
+					//
+					// These tokens can not be combined with each other or strftime(3)
+					// formatting in the same format string. You can use multiple
+					// %{format}t tokens instead.
 					formatter, err := timeFormatter(key)
 					if err != nil {
 						return err

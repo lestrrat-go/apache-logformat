@@ -119,15 +119,19 @@ func TestQuery(t *testing.T) {
 	)
 }
 
-func TestElpasedTime(t *testing.T) {
+func TestElapsedTime(t *testing.T) {
 	o := logctx.Clock
 	defer func() { logctx.Clock = o }()
 
+	const longTimeAgo = 233431200 * time.Second
 	cl := clock.NewMock()
+	cl.Add(longTimeAgo)
 	logctx.Clock = cl
+
+	// Mental note: %{[mu]?sec}t should (milli|micro)?seconds since the epoch.
 	testLog(t,
 		`%T %D %{sec}t %{msec}t %{usec}t`,
-		"1 1000000 1 1000 1000000\n",
+		fmt.Sprintf("1 1000000 %d %d %d\n", longTimeAgo/time.Second, longTimeAgo/time.Millisecond, longTimeAgo/time.Microsecond),
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cl.Add(time.Second)
 		}),
