@@ -88,9 +88,9 @@ func timeFormatter(key string) (FormatWriter, error) {
 	case "usec":
 		formatter = requestTimeMicrosecondsSinceEpoch
 	case "msec_frac":
-		formatter = elapsedTimeMilliSecondsFrac
+		formatter = requestTimeMillisecondsFracSinceEpoch
 	case "usec_frac":
-		formatter = elapsedTimeMicroSecondsFrac
+		formatter = requestTimeMicrosecondsFracSinceEpoch
 	default:
 		const beginPrefix = "begin:"
 		const endPrefix = "end:"
@@ -111,6 +111,18 @@ func makeRequestTimeSinceEpoch(base time.Duration) FormatWriter {
 	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 		dur := ctx.RequestTime().Sub(epoch)
 		s := strconv.FormatInt(dur.Nanoseconds()/int64(base), 10)
+		if _, err := dst.Write(valueOf(s, dashValue)); err != nil {
+			return errors.Wrap(err, `failed to write request time since epoch`)
+		}
+		return nil
+	})
+}
+
+func makeRequestTimeFracSinceEpoch(base time.Duration) FormatWriter {
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		dur := ctx.RequestTime().Sub(epoch)
+
+		s := fmt.Sprintf("%g", float64(dur.Nanoseconds()%int64(base*1000))/float64(base))
 		if _, err := dst.Write(valueOf(s, dashValue)); err != nil {
 			return errors.Wrap(err, `failed to write request time since epoch`)
 		}
@@ -147,14 +159,16 @@ const (
 )
 
 var (
-	elapsedTimeMicroSeconds           = makeElapsedTime(time.Microsecond, timeNotFraction)
-	elapsedTimeMilliSeconds           = makeElapsedTime(time.Millisecond, timeNotFraction)
-	elapsedTimeMicroSecondsFrac       = makeElapsedTime(time.Microsecond, timeMicroFraction)
-	elapsedTimeMilliSecondsFrac       = makeElapsedTime(time.Millisecond, timeMilliFraction)
-	elapsedTimeSeconds                = makeElapsedTime(time.Second, timeNotFraction)
-	requestTimeSecondsSinceEpoch      = makeRequestTimeSinceEpoch(time.Second)
-	requestTimeMillisecondsSinceEpoch = makeRequestTimeSinceEpoch(time.Millisecond)
-	requestTimeMicrosecondsSinceEpoch = makeRequestTimeSinceEpoch(time.Microsecond)
+	elapsedTimeMicroSeconds               = makeElapsedTime(time.Microsecond, timeNotFraction)
+	elapsedTimeMilliSeconds               = makeElapsedTime(time.Millisecond, timeNotFraction)
+	elapsedTimeMicroSecondsFrac           = makeElapsedTime(time.Microsecond, timeMicroFraction)
+	elapsedTimeMilliSecondsFrac           = makeElapsedTime(time.Millisecond, timeMilliFraction)
+	elapsedTimeSeconds                    = makeElapsedTime(time.Second, timeNotFraction)
+	requestTimeMicrosecondsFracSinceEpoch = makeRequestTimeFracSinceEpoch(time.Microsecond)
+	requestTimeMillisecondsFracSinceEpoch = makeRequestTimeFracSinceEpoch(time.Millisecond)
+	requestTimeSecondsSinceEpoch          = makeRequestTimeSinceEpoch(time.Second)
+	requestTimeMillisecondsSinceEpoch     = makeRequestTimeSinceEpoch(time.Millisecond)
+	requestTimeMicrosecondsSinceEpoch     = makeRequestTimeSinceEpoch(time.Microsecond)
 )
 
 var requestHttpMethod = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {

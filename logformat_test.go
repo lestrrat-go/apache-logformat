@@ -155,18 +155,17 @@ func TestTime(t *testing.T) {
 	)
 }
 
-func TestElpasedTimeFraction(t *testing.T) {
+func TestElapsedTimeFraction(t *testing.T) {
 	o := logctx.Clock
 	defer func() { logctx.Clock = o }()
 
 	cl := clock.NewMock()
+	cl.Add(time.Second + time.Millisecond*200 + time.Microsecond*90)
 	logctx.Clock = cl
 	testLog(t,
-		`%T.%{msec_frac}t%{usec_frac}t`,
-		"1.200090\n",
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cl.Add(time.Second + time.Millisecond*200 + time.Microsecond*90)
-		}),
+		`%{msec_frac}t %{usec_frac}t`,
+		"200.09 90\n",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
 		nil,
 		nil,
 	)
