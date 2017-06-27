@@ -188,7 +188,11 @@ var requestHttpProto = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 })
 
 var requestRemoteAddr = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
-	v := valueOf(ctx.Request().RemoteAddr, dashValue)
+	addr := ctx.Request().RemoteAddr
+	if i := strings.IndexByte(addr, ':'); i > -1 {
+		addr = addr[:i]
+	}
+	v := valueOf(addr, dashValue)
 	if _, err := dst.Write(v); err != nil {
 		return errors.Wrap(err, "failed to write request remote address")
 	}
