@@ -99,8 +99,9 @@ func timeFormatter(key string) (FormatWriter, error) {
 		} else if strings.HasPrefix(key, endPrefix) {
 			return makeRequestTimeEnd(key[len(endPrefix):])
 		}
-
-		return nil, errors.Wrap(ErrUnimplemented, "failed to compile format")
+		// if specify the format of strftime(3) without begin: or end:, same as bigin:
+		// FYI https://httpd.apache.org/docs/current/en/mod/mod_log_config.html
+		return makeRequestTimeBegin(key)
 	}
 	return formatter, nil
 }
