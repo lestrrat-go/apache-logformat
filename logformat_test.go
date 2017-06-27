@@ -135,17 +135,19 @@ func TestTime(t *testing.T) {
 	// Mental note: %{[mu]?sec}t should (milli|micro)?seconds since the epoch.
 	testLog(t,
 		fmt.Sprintf(
-			`%%T %%D %%{sec}t %%{msec}t %%{usec}t %%{begin:%s}t %%{end:%s}t`,
+			`%%T %%D %%{sec}t %%{msec}t %%{usec}t %%{begin:%s}t %%{end:%s}t %%{%s}t`,
+			pattern,
 			pattern,
 			pattern,
 		),
 		fmt.Sprintf(
-			"1 1000000 %d %d %d %s %s\n",
+			"1 1000000 %d %d %d %s %s %s\n",
 			longTimeAgo/time.Second,
 			longTimeAgo/time.Millisecond,
 			longTimeAgo/time.Microsecond,
 			f.FormatString(cl.Now()),
 			f.FormatString(cl.Now().Add(time.Second)),
+			f.FormatString(cl.Now()),
 		),
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cl.Add(time.Second)
