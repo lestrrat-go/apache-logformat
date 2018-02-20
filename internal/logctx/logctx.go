@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lestrrat/go-apache-logformat/internal/httputil"
+	"github.com/lestrrat-go/apache-logformat/internal/httputil"
 )
 
 type clock interface {

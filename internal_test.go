@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lestrrat/go-apache-logformat/internal/logctx"
+	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/stretchr/testify/assert"
 )
 

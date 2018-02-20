@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/lestrrat/go-apache-logformat/internal/httputil"
-	"github.com/lestrrat/go-apache-logformat/internal/logctx"
+	"github.com/lestrrat-go/apache-logformat/internal/httputil"
+	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/pkg/errors"
 )
 

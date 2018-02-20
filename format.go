@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	strftime "github.com/lestrrat/go-strftime"
+	strftime "github.com/lestrrat-go/strftime"
 	"github.com/pkg/errors"
 )
 
