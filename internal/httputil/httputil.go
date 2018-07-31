@@ -29,7 +29,9 @@ func ReleaseResponseWriter(rw *ResponseWriter) {
 }
 
 func allocResponseWriter() interface{} {
-	return &ResponseWriter{}
+	rw := &ResponseWriter{}
+	rw.Reset()
+	return rw
 }
 
 func (rw ResponseWriter) ContentLength() int64 {

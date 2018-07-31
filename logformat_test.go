@@ -283,3 +283,64 @@ func TestPercentB(t *testing.T) {
 		nil,
 	)
 }
+
+func TestIPv6RemoteAddr(t *testing.T) {
+	format := `%h`
+	expected := "[::1]\n"
+
+	al, err := apachelog.New(format)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
+	ctx := &Context{
+		request: &http.Request{
+			RemoteAddr: "[::1]:51111",
+		},
+	}
+
+	var buf bytes.Buffer
+	al.WriteLog(&buf, ctx)
+
+	if !assert.Equal(t, expected, buf.String()) {
+		return
+	}
+}
+
+type Context struct {
+	elapsedTime           time.Duration
+	request               *http.Request
+	requestTime           time.Time
+	responseContentLength int64
+	responseHeader        http.Header
+	responseStatus        int
+	responseTime          time.Time
+}
+
+func (ctx *Context) ElapsedTime() time.Duration {
+	return ctx.elapsedTime
+}
+
+func (ctx *Context) Request() *http.Request {
+	return ctx.request
+}
+
+func (ctx *Context) RequestTime() time.Time {
+	return ctx.requestTime
+}
+
+func (ctx *Context) ResponseContentLength() int64 {
+	return ctx.responseContentLength
+}
+
+func (ctx *Context) ResponseHeader() http.Header {
+	return ctx.responseHeader
+}
+
+func (ctx *Context) ResponseStatus() int {
+	return ctx.responseStatus
+}
+
+func (ctx *Context) ResponseTime() time.Time {
+	return ctx.responseTime
+}
