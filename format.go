@@ -190,7 +190,7 @@ var requestHttpProto = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 
 var requestRemoteAddr = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
 	addr := ctx.Request().RemoteAddr
-	if i := strings.IndexByte(addr, ':'); i > -1 {
+	if i := strings.LastIndexByte(addr, ':'); i > -1 {
 		addr = addr[:i]
 	}
 	v := valueOf(addr, dashValue)
