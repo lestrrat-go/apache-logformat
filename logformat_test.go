@@ -16,7 +16,6 @@ import (
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	strftime "github.com/lestrrat-go/strftime"
 	"github.com/stretchr/testify/assert"
-	"net"
 )
 
 const message = "Hello, World!"
@@ -51,18 +50,14 @@ func newServer(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.
 	return httptest.NewServer(l.Wrap(h, out))
 }
 
-func testLog(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request)){
-	testLogCustomServer(t, pattern, expected, h, modifyURL, modifyRequest, newServer)
-}
-
-func testLogCustomServer(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request), newServerFunc func(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.Server) {
+func testLog(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request)) {
 	l, err := apachelog.New(pattern)
 	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
 	var buf bytes.Buffer
-	s := newServerFunc(l, h, &buf)
+	s := newServer(l, h, &buf)
 	defer s.Close()
 
 	u := s.URL
@@ -290,16 +285,62 @@ func TestPercentB(t *testing.T) {
 }
 
 func TestIPv6RemoteAddr(t *testing.T) {
-	testLogCustomServer(t, `%h`, "[::1]\n", hello, nil, nil, func(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.Server {
-		s := httptest.NewUnstartedServer(l.Wrap(h, out))
-		listener, err := net.Listen("tcp6", "[::1]:0")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Skipping test: httptest: failed to listen on a port: %v", err)
-			// Travis CI does not support IPv6 as of July 2018
-			t.SkipNow()
-		}
-		s.Listener = listener
-		s.Start()
-		return s
-	})
+	format := `%h`
+	expected := "[::1]\n"
+
+	al, err := apachelog.New(format)
+	if !assert.NoError(t, err, "apachelog.New should succeed") {
+		return
+	}
+
+	ctx := &Context{
+		request: &http.Request{
+			RemoteAddr: "[::1]:51111",
+		},
+	}
+
+	var buf bytes.Buffer
+	al.WriteLog(&buf, ctx)
+
+	if !assert.Equal(t, expected, buf.String()) {
+		return
+	}
+}
+
+type Context struct {
+	elapsedTime           time.Duration
+	request               *http.Request
+	requestTime           time.Time
+	responseContentLength int64
+	responseHeader        http.Header
+	responseStatus        int
+	responseTime          time.Time
+}
+
+func (ctx *Context) ElapsedTime() time.Duration {
+	return ctx.elapsedTime
+}
+
+func (ctx *Context) Request() *http.Request {
+	return ctx.request
+}
+
+func (ctx *Context) RequestTime() time.Time {
+	return ctx.requestTime
+}
+
+func (ctx *Context) ResponseContentLength() int64 {
+	return ctx.responseContentLength
+}
+
+func (ctx *Context) ResponseHeader() http.Header {
+	return ctx.responseHeader
+}
+
+func (ctx *Context) ResponseStatus() int {
+	return ctx.responseStatus
+}
+
+func (ctx *Context) ResponseTime() time.Time {
+	return ctx.responseTime
 }
