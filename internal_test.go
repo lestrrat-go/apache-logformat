@@ -8,6 +8,8 @@ import (
 
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/stretchr/testify/assert"
+	"github.com/lestrrat-go/apache-logformat/internal/httputil"
+	"net/http/httptest"
 )
 
 func isDash(t *testing.T, s string) bool {
@@ -59,5 +61,13 @@ func TestInternalDashEmpty(t *testing.T) {
 
 	for _, c := range cases {
 		f(t, c.Name, c.Dash, c.Format)
+	}
+}
+
+func TestResponseWriterDefaultStatusCode(t *testing.T) {
+	writer := httptest.NewRecorder()
+	uut := httputil.GetResponseWriter(writer)
+	if uut.StatusCode() != http.StatusOK {
+		t.Fail()
 	}
 }

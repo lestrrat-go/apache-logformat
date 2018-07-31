@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	strftime "github.com/lestrrat-go/strftime"
 	"github.com/stretchr/testify/assert"
+	"net"
 )
 
 const message = "Hello, World!"
@@ -50,14 +51,18 @@ func newServer(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.
 	return httptest.NewServer(l.Wrap(h, out))
 }
 
-func testLog(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request)) {
+func testLog(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request)){
+	testLogCustomServer(t, pattern, expected, h, modifyURL, modifyRequest, newServer)
+}
+
+func testLogCustomServer(t *testing.T, pattern, expected string, h http.Handler, modifyURL func(string) string, modifyRequest func(*http.Request), newServerFunc func(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.Server) {
 	l, err := apachelog.New(pattern)
 	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
 
 	var buf bytes.Buffer
-	s := newServer(l, h, &buf)
+	s := newServerFunc(l, h, &buf)
 	defer s.Close()
 
 	u := s.URL
@@ -282,4 +287,17 @@ func TestPercentB(t *testing.T) {
 		nil,
 		nil,
 	)
+}
+
+func TestIPv6RemoteAddr(t *testing.T) {
+	testLogCustomServer(t, `%h`, "[::1]\n", hello, nil, nil, func(l *apachelog.ApacheLog, h http.Handler, out io.Writer) *httptest.Server {
+		s := httptest.NewUnstartedServer(l.Wrap(h, out))
+		listener, err := net.Listen("tcp6", "[::1]:0")
+		if err != nil {
+			panic(fmt.Sprintf("httptest: failed to listen on a port: %v", err))
+		}
+		s.Listener = listener
+		s.Start()
+		return s
+	})
 }
