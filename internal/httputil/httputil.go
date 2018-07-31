@@ -19,12 +19,12 @@ type ResponseWriter struct {
 
 func GetResponseWriter(w http.ResponseWriter) *ResponseWriter {
 	rw := responseWriterPool.Get().(*ResponseWriter)
+	rw.Reset()
 	rw.responseWriter = w
 	return rw
 }
 
 func ReleaseResponseWriter(rw *ResponseWriter) {
-	rw.Reset()
 	responseWriterPool.Put(rw)
 }
 
