@@ -294,7 +294,9 @@ func TestIPv6RemoteAddr(t *testing.T) {
 		s := httptest.NewUnstartedServer(l.Wrap(h, out))
 		listener, err := net.Listen("tcp6", "[::1]:0")
 		if err != nil {
-			panic(fmt.Sprintf("httptest: failed to listen on a port: %v", err))
+			fmt.Sprintf("httptest: failed to listen on a port: %v", err)
+			// Travis CI does not support IPv6 as of July 2018
+			t.SkipNow()
 		}
 		s.Listener = listener
 		s.Start()
