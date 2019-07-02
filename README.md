@@ -22,7 +22,7 @@ func main() {
   s.HandleFunc("/", handleIndex)
   s.HandleFunc("/foo", handleFoo)
 
-  http.ListenAndServe(":8080", apachelog.CombinedLog.Wrap(s, os.Stderr))
+  http.ListenAndServe(":8080", apachelog.CombinedLog.Wrap(&s, os.Stderr))
 }
 ```
 
