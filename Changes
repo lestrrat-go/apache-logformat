@@ -1,0 +1,8 @@
+Changes
+=======
+
+v2.0.3 - Jul 10, 2019
+  [MISCELLANEOUS]
+    * Belated addition of Changes file
+  [FEATURES]
+		* Environment variables can now be used via `%{ENVIRONMENT_VARIABLE}e` format (#22)
