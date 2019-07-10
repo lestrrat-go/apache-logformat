@@ -297,6 +297,13 @@ var responseContentLength = FormatWriteFunc(func(dst io.Writer, ctx LogCtx) erro
 	return err
 })
 
+func makeEnvVar(key string) FormatWriter {
+	return FormatWriteFunc(func(dst io.Writer, ctx LogCtx) error {
+		_, err := dst.Write(valueOf(os.Getenv(key), dashValue))
+		return err
+	})
+}
+
 func (f *Format) compile(s string) error {
 	var cbs []FormatWriter
 
@@ -412,6 +419,8 @@ func (f *Format) compile(s string) error {
 				blockType := s[end+1]
 				key := s[i:end]
 				switch blockType {
+				case 'e': // environment variables
+					cbs = append(cbs, makeEnvVar(key))
 				case 'i':
 					cbs = append(cbs, requestHeader(key))
 				case 'o':
