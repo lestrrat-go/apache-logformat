@@ -8,11 +8,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/facebookgo/clock"
-	"github.com/lestrrat-go/apache-logformat"
+	apachelog "github.com/lestrrat-go/apache-logformat"
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	strftime "github.com/lestrrat-go/strftime"
 	"github.com/stretchr/testify/assert"
@@ -304,6 +305,36 @@ func TestIPv6RemoteAddr(t *testing.T) {
 
 	if !assert.Equal(t, expected, buf.String()) {
 		return
+	}
+}
+
+func TestEnvironmentVariable(t *testing.T) {
+	// Well.... let's see. I don't want to change the user's env var,
+	// so let's just scan for something already present in the environment variable list
+
+	for _, v := range os.Environ() {
+		vs := strings.SplitN(v, "=", 2)
+
+		t.Logf("Testing environment variable %s", vs[0])
+		al, err := apachelog.New(fmt.Sprintf(`%%{%s}e`, vs[0]))
+		if !assert.NoError(t, err, "apachelog.New should succeed") {
+			return
+		}
+
+		var ctx Context
+		var buf bytes.Buffer
+		al.WriteLog(&buf, &ctx)
+
+		var expected = "-"
+		if vs[1] != "" {
+			expected = vs[1]
+		}
+		// Be careful, the log line has a trailing new line
+		expected = expected + "\n"
+
+		if !assert.Equal(t, expected, buf.String()) {
+			return
+		}
 	}
 }
 
