@@ -15,15 +15,11 @@ type ResponseWriter struct {
 	responseContentLength int64
 	responseStatus        int
 	responseWriter        http.ResponseWriter
-	flush                 func()
 }
 
 func GetResponseWriter(w http.ResponseWriter) *ResponseWriter {
 	rw := responseWriterPool.Get().(*ResponseWriter)
 	rw.responseWriter = w
-	if f, ok := w.(http.Flusher); ok {
-		rw.flush = f.Flush
-	}
 	return rw
 }
 
@@ -68,7 +64,7 @@ func (rw *ResponseWriter) WriteHeader(status int) {
 }
 
 func (rw *ResponseWriter) Flush() {
-	if rw.flush != nil {
-		rw.flush()
+	if f, ok := rw.responseWriter.(http.Flusher); ok {
+		f.Flush()
 	}
 }
