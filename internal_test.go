@@ -95,7 +95,7 @@ func TestFlusher(t *testing.T) {
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
-			time.Sleep(1)
+			time.Sleep(time.Microsecond)
 		}
 	})
 
@@ -117,6 +117,12 @@ func TestFlusher(t *testing.T) {
 	var i int
 	for {
 		n, err := resp.Body.Read(buf)
+		if n == 0 {
+			if !assert.Equal(t, len(lines)-1, i-1, "wrong number of chunks") {
+				return
+			}
+			break
+		}
 		t.Logf("Response body %d: %d %s", i, n, buf)
 		if !assert.Equal(t, []byte(lines[i]), buf[:n], "wrong response body") {
 			return
