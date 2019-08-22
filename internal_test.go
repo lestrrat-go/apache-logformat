@@ -3,12 +3,15 @@ package apachelog
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/lestrrat-go/apache-logformat/internal/httputil"
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/stretchr/testify/assert"
-	"github.com/lestrrat-go/apache-logformat/internal/httputil"
 	"net/http/httptest"
 )
 
@@ -69,5 +72,64 @@ func TestResponseWriterDefaultStatusCode(t *testing.T) {
 	uut := httputil.GetResponseWriter(writer)
 	if uut.StatusCode() != http.StatusOK {
 		t.Fail()
+	}
+}
+
+func TestFlusherInterface(t *testing.T) {
+	var rw httputil.ResponseWriter
+	var f http.Flusher = &rw
+	_ = f
+}
+
+func TestFlusher(t *testing.T) {
+	lines := []string{
+		"Hello, World!",
+		"Hello again, World!",
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range lines {
+			if _, err := w.Write([]byte(line)); err != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			time.Sleep(1)
+		}
+	})
+
+	s := httptest.NewServer(CommonLog.Wrap(handler, ioutil.Discard))
+	defer s.Close()
+
+	req, err := http.NewRequest("GET", s.URL, nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if !assert.NoError(t, err, "GET should succeed") {
+		return
+	}
+	defer resp.Body.Close()
+
+	buf := make([]byte, 64)
+	var i int
+	for {
+		n, err := resp.Body.Read(buf)
+		t.Logf("Response body %d: %d %s", i, n, buf)
+		if !assert.Equal(t, []byte(lines[i]), buf[:n], "wrong response body") {
+			return
+		}
+		if err == io.EOF {
+			if !assert.Equal(t, len(lines)-1, i, "wrong number of chunks") {
+				return
+			}
+			break
+		}
+		if !assert.NoError(t, err, "Body read should succeed") {
+			return
+		}
+		i++
 	}
 }
