@@ -123,7 +123,7 @@ func TestFlusher(t *testing.T) {
 			}
 			break
 		}
-		t.Logf("Response body %d: %d %s", i, n, buf)
+		t.Logf("Response body %d: %d %s", i, n, buf[:n])
 		if !assert.Equal(t, []byte(lines[i]), buf[:n], "wrong response body") {
 			return
 		}
