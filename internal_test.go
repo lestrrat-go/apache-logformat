@@ -3,12 +3,15 @@ package apachelog
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/lestrrat-go/apache-logformat/internal/httputil"
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/stretchr/testify/assert"
-	"github.com/lestrrat-go/apache-logformat/internal/httputil"
 	"net/http/httptest"
 )
 
@@ -69,5 +72,95 @@ func TestResponseWriterDefaultStatusCode(t *testing.T) {
 	uut := httputil.GetResponseWriter(writer)
 	if uut.StatusCode() != http.StatusOK {
 		t.Fail()
+	}
+}
+
+func TestFlusherInterface(t *testing.T) {
+	var rw httputil.ResponseWriter
+	var f http.Flusher = &rw
+	_ = f
+}
+
+func TestFlusher(t *testing.T) {
+	lines := []string{
+		"Hello, World!",
+		"Hello again, World!",
+	}
+
+	// We need to synchronize the reads with the writes of each chunk
+	sync := make(chan struct{})
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range lines {
+			if _, err := w.Write([]byte(line)); err != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			sync <- struct{}{}
+		}
+		close(sync)
+	})
+
+	s := httptest.NewServer(CommonLog.Wrap(handler, ioutil.Discard))
+	defer s.Close()
+
+	req, err := http.NewRequest("GET", s.URL, nil)
+	if !assert.NoError(t, err, "request creation should succeed") {
+		return
+	}
+
+	// If it isn't flushing properly and sending chunks, then the call to
+	// Do() will hang waiting for the entire body, while the handler will be
+	// stuck after having written the first line.  So have an explicit
+	// timeout for the read.
+	timer := time.NewTimer(time.Second)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resp, err := http.DefaultClient.Do(req)
+		if !assert.NoError(t, err, "GET should succeed") {
+			return
+		}
+		defer resp.Body.Close()
+
+		buf := make([]byte, 64)
+		var i int
+		for {
+			_, ok := <-sync
+			if !ok {
+				t.Fatalf("got channel close")
+				break
+			}
+			n, err := resp.Body.Read(buf)
+			if n == 0 {
+				if !assert.Equal(t, len(lines)-1, i-1, "wrong number of chunks") {
+					return
+				}
+				break
+			}
+			t.Logf("Response body %d: %d %s", i, n, buf[:n])
+			if !assert.Equal(t, []byte(lines[i]), buf[:n], "wrong response body") {
+				return
+			}
+			if err == io.EOF {
+				if !assert.Equal(t, len(lines)-1, i, "wrong number of chunks") {
+					return
+				}
+				break
+			}
+			if !assert.NoError(t, err, "Body read should succeed") {
+				return
+			}
+			i++
+		}
+	}()
+
+	select {
+	case <-timer.C:
+		close(sync)
+		t.Fatal("timed out: not flushing properly?")
+	case <-done:
 	}
 }
