@@ -158,6 +158,24 @@ func TestTime(t *testing.T) {
 	)
 }
 
+func TestElapsed(t *testing.T) {
+	o := logctx.Clock
+	defer func() { logctx.Clock = o }()
+	cl := clock.NewMock()
+	logctx.Clock = cl
+	testLog(t, `%T %D %{s}T %{us}T %{ms}T`,
+		"3 3141592 3 3141592 3141\n",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cl.Add(3141592 * time.Microsecond)
+		}),
+		nil,
+		nil,
+	)
+
+    _, err := apachelog.New(`%{h}T`)
+    assert.EqualError(t, err, "failed to compile log format: unrecognised elapsed time unit: h")
+}
+
 func TestElapsedTimeFraction(t *testing.T) {
 	o := logctx.Clock
 	defer func() { logctx.Clock = o }()
@@ -238,7 +256,7 @@ func TestFixedSequence(t *testing.T) {
 }
 
 func TestFull(t *testing.T) {
-	l, err := apachelog.New(`hello, %% %b %D %h %H %l %m %p %q %r %s %t %T %u %U %v %V %>s %{X-LogFormat-Test}i %{X-LogFormat-Test}o world!`)
+	l, err := apachelog.New(`hello, %% %b %D %h %H %l %m %p %q %r %s %t %T %{ms}T %u %U %v %V %>s %{X-LogFormat-Test}i %{X-LogFormat-Test}o world!`)
 	if !assert.NoError(t, err, "apachelog.New should succeed") {
 		return
 	}
@@ -269,7 +287,7 @@ func TestFull(t *testing.T) {
 		return
 	}
 
-	if !assert.Regexp(t, `^hello, % - 5000000 127\.0\.0\.1 HTTP/1\.1 - GET \d+ \?hello=world GET /hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 - /hello_world 127\.0\.0\.1 127\.0\.0\.1 400 Hello, Request! Hello, Response! world!\n$`, buf.String(), "Log line must match") {
+	if !assert.Regexp(t, `^hello, % - 5000000 127\.0\.0\.1 HTTP/1\.1 - GET \d+ \?hello=world GET /hello_world\?hello=world HTTP/1\.1 400 \[\d{2}/[a-zA-Z]+/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] 5 5000 - /hello_world 127\.0\.0\.1 127\.0\.0\.1 400 Hello, Request! Hello, Response! world!\n$`, buf.String(), "Log line must match") {
 		return
 	}
 	t.Logf("%s", buf.String())

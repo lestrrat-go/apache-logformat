@@ -78,6 +78,19 @@ func makeRequestTimeEnd(s string) (FormatWriter, error) {
 	}), nil
 }
 
+func elapsedFormatter(key string) (FormatWriter, error) {
+	switch key {
+	case "ms":
+		return elapsedTimeMilliSeconds, nil
+	case "us":
+		return elapsedTimeMicroSeconds, nil
+	case "s":
+		return elapsedTimeSeconds, nil
+	default:
+		return nil, fmt.Errorf("unrecognised elapsed time unit: %s", key)
+	}
+}
+
 func timeFormatter(key string) (FormatWriter, error) {
 	var formatter FormatWriter
 	switch key {
@@ -445,6 +458,12 @@ func (f *Format) compile(s string) error {
 					// formatting in the same format string. You can use multiple
 					// %{format}t tokens instead.
 					formatter, err := timeFormatter(key)
+					if err != nil {
+						return err
+					}
+					cbs = append(cbs, formatter)
+				case 'T':
+					formatter, err := elapsedFormatter(key)
 					if err != nil {
 						return err
 					}
