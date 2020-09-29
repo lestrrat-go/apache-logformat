@@ -1,7 +1,13 @@
 Changes
 =======
 
-v2.0.3 - Jul 10, 2019
+v2.0.5 - 29 Sep 2020
+  * Implement %T with units, available for Apache 2.4.13+ (#25, jmrein)
+
+v2.0.4 - 11 Sep 2019
+  * Fulfill the http.Flusher interface, which allows servers to emit chunks of response while using this library (#24)
+
+v2.0.3 - 10 Jul 2019
   [MISCELLANEOUS]
     * Belated addition of Changes file
   [FEATURES]
