@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/facebookgo/clock"
-	apachelog "github.com/lestrrat-go/apache-logformat"
-	"github.com/lestrrat-go/apache-logformat/internal/logctx"
+	apachelog "github.com/lestrrat-go/apache-logformat/v2"
+	"github.com/lestrrat-go/apache-logformat/v2/internal/logctx"
 	strftime "github.com/lestrrat-go/strftime"
 	"github.com/stretchr/testify/assert"
 )
