@@ -175,8 +175,6 @@ const (
 var (
 	elapsedTimeMicroSeconds               = makeElapsedTime(time.Microsecond, timeNotFraction)
 	elapsedTimeMilliSeconds               = makeElapsedTime(time.Millisecond, timeNotFraction)
-	elapsedTimeMicroSecondsFrac           = makeElapsedTime(time.Microsecond, timeMicroFraction)
-	elapsedTimeMilliSecondsFrac           = makeElapsedTime(time.Millisecond, timeMilliFraction)
 	elapsedTimeSeconds                    = makeElapsedTime(time.Second, timeNotFraction)
 	requestTimeMicrosecondsFracSinceEpoch = makeRequestTimeFracSinceEpoch(time.Microsecond)
 	requestTimeMillisecondsFracSinceEpoch = makeRequestTimeFracSinceEpoch(time.Millisecond)

@@ -38,7 +38,7 @@ func TestBasic(t *testing.T) {
 
 	var out bytes.Buffer
 	h := apachelog.CombinedLog.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello, World!"))
+		_, _ = w.Write([]byte("Hello, World!"))
 	}), &out)
 
 	w := httptest.NewRecorder()
@@ -172,8 +172,8 @@ func TestElapsed(t *testing.T) {
 		nil,
 	)
 
-    _, err := apachelog.New(`%{h}T`)
-    assert.EqualError(t, err, "failed to compile log format: unrecognised elapsed time unit: h")
+	_, err := apachelog.New(`%{h}T`)
+	assert.EqualError(t, err, "failed to compile log format: unrecognised elapsed time unit: h")
 }
 
 func TestElapsedTimeFraction(t *testing.T) {
@@ -319,7 +319,7 @@ func TestIPv6RemoteAddr(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	al.WriteLog(&buf, ctx)
+	_ = al.WriteLog(&buf, ctx)
 
 	if !assert.Equal(t, expected, buf.String()) {
 		return
@@ -341,7 +341,7 @@ func TestEnvironmentVariable(t *testing.T) {
 
 		var ctx Context
 		var buf bytes.Buffer
-		al.WriteLog(&buf, &ctx)
+		_ = al.WriteLog(&buf, &ctx)
 
 		var expected = "-"
 		if vs[1] != "" {
