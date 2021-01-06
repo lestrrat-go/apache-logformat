@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/apache-logformat/internal/httputil"
-	"github.com/lestrrat-go/apache-logformat/internal/logctx"
+	"github.com/lestrrat-go/apache-logformat/v2/internal/httputil"
+	"github.com/lestrrat-go/apache-logformat/v2/internal/logctx"
 	"github.com/stretchr/testify/assert"
 	"net/http/httptest"
 )
