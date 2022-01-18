@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/apache-logformat/internal/httputil"
+	"net/http/httptest"
+
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/stretchr/testify/assert"
-	"net/http/httptest"
 )
 
 func isDash(t *testing.T, s string) bool {
@@ -67,20 +67,6 @@ func TestInternalDashEmpty(t *testing.T) {
 	}
 }
 
-func TestResponseWriterDefaultStatusCode(t *testing.T) {
-	writer := httptest.NewRecorder()
-	uut := httputil.GetResponseWriter(writer)
-	if uut.StatusCode() != http.StatusOK {
-		t.Fail()
-	}
-}
-
-func TestFlusherInterface(t *testing.T) {
-	var rw httputil.ResponseWriter
-	var f http.Flusher = &rw
-	_ = f
-}
-
 func TestFlusher(t *testing.T) {
 	lines := []string{
 		"Hello, World!",
@@ -95,6 +81,7 @@ func TestFlusher(t *testing.T) {
 			if _, err := w.Write([]byte(line)); err != nil {
 				return
 			}
+
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}

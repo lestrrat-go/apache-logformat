@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/lestrrat-go/apache-logformat/internal/httputil"
 )
 
 type clock interface {
@@ -86,10 +84,10 @@ func (ctx *Context) Reset() {
 	ctx.responseTime = time.Time{}
 }
 
-func (ctx *Context) Finalize(wrapped *httputil.ResponseWriter) {
+func (ctx *Context) Finalize(code int, contentLength int64, header http.Header) {
 	ctx.responseTime = Clock.Now()
 	ctx.elapsedTime = ctx.responseTime.Sub(ctx.requestTime)
-	ctx.responseContentLength = wrapped.ContentLength()
-	ctx.responseHeader = wrapped.Header()
-	ctx.responseStatus = wrapped.StatusCode()
+	ctx.responseContentLength = contentLength
+	ctx.responseHeader = header
+	ctx.responseStatus = code
 }

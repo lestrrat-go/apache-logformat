@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/apache-logformat/v2/internal/httputil"
+	"net/http/httptest"
+
 	"github.com/lestrrat-go/apache-logformat/v2/internal/logctx"
 	"github.com/stretchr/testify/assert"
-	"net/http/httptest"
 )
 
 func isDash(t *testing.T, s string) bool {
@@ -65,20 +65,6 @@ func TestInternalDashEmpty(t *testing.T) {
 	for _, c := range cases {
 		f(t, c.Name, c.Dash, c.Format)
 	}
-}
-
-func TestResponseWriterDefaultStatusCode(t *testing.T) {
-	writer := httptest.NewRecorder()
-	uut := httputil.GetResponseWriter(writer)
-	if uut.StatusCode() != http.StatusOK {
-		t.Fail()
-	}
-}
-
-func TestFlusherInterface(t *testing.T) {
-	var rw httputil.ResponseWriter
-	var f http.Flusher = &rw
-	_ = f
 }
 
 func TestFlusher(t *testing.T) {

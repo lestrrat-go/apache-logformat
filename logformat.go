@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/lestrrat-go/apache-logformat/internal/httputil"
+	"github.com/felixge/httpsnoop"
 	"github.com/lestrrat-go/apache-logformat/internal/logctx"
 	"github.com/pkg/errors"
 )
@@ -50,11 +50,26 @@ func (al *ApacheLog) Wrap(h http.Handler, dst io.Writer) http.Handler {
 		ctx := logctx.Get(r)
 		defer logctx.Release(ctx)
 
-		wrapped := httputil.GetResponseWriter(w)
-		defer httputil.ReleaseResponseWriter(wrapped)
+		var statusCode int
+		var contentLength int64
+		wrapped := httpsnoop.Wrap(w, httpsnoop.Hooks{
+			WriteHeader: func(whf httpsnoop.WriteHeaderFunc) httpsnoop.WriteHeaderFunc {
+				return func(code int) {
+					statusCode = code
+					whf(code)
+				}
+			},
+			Write: func(wf httpsnoop.WriteFunc) httpsnoop.WriteFunc {
+				return func(b []byte) (int, error) {
+					n, err := wf(b)
+					contentLength += int64(n)
+					return n, err
+				}
+			},
+		})
 
 		defer func() {
-			ctx.Finalize(wrapped)
+			ctx.Finalize(statusCode, contentLength, wrapped.Header())
 			if err := al.WriteLog(dst, ctx); err != nil {
 				// Hmmm... no where to log except for stderr
 				os.Stderr.Write([]byte(err.Error()))
